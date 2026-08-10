@@ -1,0 +1,19 @@
+# Rust / Tauri
+target/
+src-tauri/gen/schemas
+
+# Node (frontend)
+node_modules/
+dist/
+*.local
+
+# TeXPresso 编译中间文件（见 docs/design.md：统一收纳于 tmp/）
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+*.swp
