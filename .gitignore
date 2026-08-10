@@ -1,19 +1,28 @@
-# Rust / Tauri
-target/
-src-tauri/gen/schemas
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Node (frontend)
-node_modules/
-dist/
+node_modules
+dist
+dist-ssr
 *.local
 
 # TeXPresso 编译中间文件（见 docs/design.md：统一收纳于 tmp/）
 tmp/
 
-# OS
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
 Thumbs.db
-
-# Editors
-.idea/
-*.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
