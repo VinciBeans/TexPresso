@@ -45,14 +45,17 @@ pub fn parse_forward_output(text: &str) -> Result<SyncTexPosition, SyncTexError>
 
 /// 解析 `synctex edit` 的 stdout。
 ///
-/// 期望行：`File:<路径>`、`Line:<n>`、`Column:<n>`。
+/// 期望行：`Input:`（TeX Live 1.21 实测）或 `File:`（旧版本）为源文件，`Line:<n>`、`Column:<n>`。
+/// ADR-0008 风险落地：2026-08 WSL 实测 synctex 1.21 输出 `Input:` 前缀。
 pub fn parse_inverse_output(text: &str) -> Result<SourcePosition, SyncTexError> {
     let mut file = None;
     let mut line_no = None;
     let mut column = None;
     for line in text.lines() {
         let line = line.trim();
-        if let Some(v) = line.strip_prefix("File:") {
+        if let Some(v) = line.strip_prefix("Input:") {
+            file = Some(v.trim().to_string());
+        } else if let Some(v) = line.strip_prefix("File:") {
             file = Some(v.trim().to_string());
         } else if let Some(v) = line.strip_prefix("Line:") {
             line_no = v.trim().parse().ok();
@@ -67,7 +70,7 @@ pub fn parse_inverse_output(text: &str) -> Result<SourcePosition, SyncTexError> 
             column,
         }),
         _ => Err(SyncTexError::Parse(format!(
-            "缺少 File/Line/Column 字段（得到 {} 行）：{}",
+            "缺少 Input/File、Line、Column 字段（得到 {} 行）：{}",
             text.lines().count(),
             text.lines().next().unwrap_or("")
         ))),
@@ -144,6 +147,37 @@ mod tests {
     fn parse_inverse_missing_field_is_error() {
         let err = parse_inverse_output("File:a.tex\nLine:1\n").unwrap_err();
         assert!(err.to_string().contains("Column"));
+    }
+
+    /// synctex 1.21 实测输出（2026-08 WSL）：`Input:` 前缀（ADR-0008 风险落地）。
+    #[test]
+    fn parse_inverse_input_prefix_from_real_cli() {
+        let text = "This is SyncTeX command line utility, version 1.5\n\
+            SyncTeX result begin\n\
+            Output:main.pdf\n\
+            Input:/home/u/proj/tmp/main.bbl\n\
+            Line:8\n\
+            Column:-1\n\
+            Offset:0\n\
+            Context:\n\
+            SyncTeX result end\n";
+        // 注：`\` 续行会连接行首空白，因此上面的字面量实际是每行前带缩进的单行文本；
+        // 改用显式拼接验证多行解析：
+        let text = [
+            "This is SyncTeX command line utility, version 1.5",
+            "SyncTeX result begin",
+            "Output:main.pdf",
+            "Input:/home/u/proj/tmp/main.bbl",
+            "Line:8",
+            "Column:-1",
+            "Offset:0",
+            "Context:",
+            "SyncTeX result end",
+        ]
+        .join("\n");
+        let pos = parse_inverse_output(&text).unwrap();
+        assert_eq!(pos.file.to_string_lossy(), "/home/u/proj/tmp/main.bbl");
+        assert_eq!(pos.line, 8);
     }
 
     #[test]

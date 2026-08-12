@@ -11,6 +11,14 @@ use texpresso_core::synctex::{
 
 pub struct SyncTexCli;
 
+impl SyncTexCli {
+    /// synctex 数据目录：PDF 在项目根（拷贝版），.synctex.gz 在 tmp/（latexmk -outdir）。
+    /// `-d` 参数告诉 synctex 去哪里找数据文件（2026-08 实测必需）。
+    fn synctex_dir(pdf: &Path) -> std::path::PathBuf {
+        pdf.parent().unwrap_or(Path::new(".")).join("tmp")
+    }
+}
+
 #[async_trait]
 impl SyncTexProvider for SyncTexCli {
     async fn forward(&self, src: &SourcePosition, pdf: &Path) -> Result<SyncTexPosition, SyncTexError> {
@@ -20,6 +28,8 @@ impl SyncTexProvider for SyncTexCli {
             .arg(format!("{}:{}:{}", src.line, src.column, src.file.display()))
             .arg("-o")
             .arg(pdf)
+            .arg("-d")
+            .arg(Self::synctex_dir(pdf))
             .arg("-x")
             .output()
             .await
@@ -39,6 +49,8 @@ impl SyncTexProvider for SyncTexCli {
             .arg("edit")
             .arg("-o")
             .arg(format!("{}:{}:{}:{}", pos.page, pos.x, pos.y, pdf.display()))
+            .arg("-d")
+            .arg(Self::synctex_dir(pdf))
             .output()
             .await
             .map_err(|e| SyncTexError::Io(format!("synctex 启动失败：{e}")))?;

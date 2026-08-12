@@ -44,10 +44,11 @@ async function load() {
   try {
     const data = await fetch(convertFileSrc(path)).then((r) => r.arrayBuffer());
     loadingTask?.destroy().catch(() => {});
-    // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）
+    // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）；
+    // 必须绝对 URL：worker 内相对路径会基于 worker 脚本 URL（asset 协议）解析导致 404
     loadingTask = pdfjsLib.getDocument({
       data,
-      cMapUrl: "/pdfjs/cmaps/",
+      cMapUrl: new URL("/pdfjs/cmaps/", document.baseURI).href,
       cMapPacked: true,
     });
     doc = await loadingTask.promise;
