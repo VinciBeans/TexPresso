@@ -1,4 +1,25 @@
-# Logs
+# ============ Pi 编码代理本地状态（运行产物，勿上传） ============
+.pi/
+
+# ============ 依赖 ============
+node_modules/
+.pnp
+.pnp.js
+
+# ============ 构建产物 ============
+dist/
+dist-ssr/
+coverage/
+*.local
+
+# Rust / Tauri（src-tauri/.gitignore 另有 /target/ 与 /gen/schemas）
+src-tauri/target/
+src-tauri/gen/
+
+# ============ TeXPresso 编译中间文件（见 docs/design.md：统一收纳于 tmp/） ============
+tmp/
+
+# ============ 日志 ============
 logs
 *.log
 npm-debug.log*
@@ -7,22 +28,25 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# ============ 环境变量与密钥（安全兜底） ============
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 
-# TeXPresso 编译中间文件（见 docs/design.md：统一收纳于 tmp/）
-tmp/
-
-# Editor directories and files
+# ============ 编辑器 / IDE ============
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-Thumbs.db
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ============ 操作系统 ============
+.DS_Store
+Thumbs.db
