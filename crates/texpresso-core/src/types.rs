@@ -134,7 +134,8 @@ pub struct SyncTexTarget {
 pub struct SourcePositionDto {
     pub file: String,
     pub line: u32,
-    pub column: u32,
+    /// 列号；-1 = 未知（synctex 1.21 输出契约）。
+    pub column: i32,
 }
 
 // ---------------------------------------------------------------- 内部类型

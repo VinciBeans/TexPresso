@@ -7,7 +7,8 @@ use std::path::PathBuf;
 pub struct SourcePosition {
     pub file: PathBuf,
     pub line: u32,
-    pub column: u32,
+    /// 列号；-1 = 未知（synctex 1.21 实测输出 Column:-1，ADR-0008 风险落地）。
+    pub column: i32,
 }
 
 /// PDF 位置（正向定位结果）。
