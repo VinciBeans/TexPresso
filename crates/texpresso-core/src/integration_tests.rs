@@ -92,8 +92,10 @@ async fn multi_candidate_then_manual_override() {
     ));
 
     // 前端弹窗选择 b.tex → 覆盖写进设置（modules.md §6 root_file 键）
-    let mut settings = Settings::default();
-    settings.root_file = Some(PathBuf::from("proj/b.tex"));
+    let settings = Settings {
+        root_file: Some(PathBuf::from("proj/b.tex")),
+        ..Settings::default()
+    };
     let project = ProjectState {
         root: PathBuf::from("proj"),
         root_file: settings.root_file.clone(),

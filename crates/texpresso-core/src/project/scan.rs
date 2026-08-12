@@ -24,10 +24,7 @@ pub fn is_ignored(path: &Path, root: &Path) -> bool {
     if is_hidden_or_tmp(path, root) {
         return true;
     }
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("tex") => false,
-        _ => true,
-    }
+    !matches!(path.extension().and_then(|e| e.to_str()), Some("tex"))
 }
 
 /// 文件树展示忽略规则：只藏 tmp/ 与隐藏项（树需要展示所有扩展名）。

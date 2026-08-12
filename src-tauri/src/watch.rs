@@ -137,14 +137,15 @@ fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Opt
 /// rename 事件同时产出 from/to；这里都视为"变化"。
 fn normalize_event_paths(event: &notify::Event) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let notify::EventKind::Modify(notify::event::ModifyKind::Name(rename)) = event.kind {
-        if let notify::event::RenameMode::Both = rename {
-            // from/to 成对出现，取 to（新路径）
-            if let Some(to) = event.paths.last() {
-                out.push(to.clone());
-            }
-            return out;
+    if let notify::EventKind::Modify(notify::event::ModifyKind::Name(
+        notify::event::RenameMode::Both,
+    )) = event.kind
+    {
+        // from/to 成对出现，取 to（新路径）
+        if let Some(to) = event.paths.last() {
+            out.push(to.clone());
         }
+        return out;
     }
     out.extend(event.paths.iter().cloned());
     out

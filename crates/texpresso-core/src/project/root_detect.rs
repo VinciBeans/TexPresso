@@ -2,10 +2,8 @@
 //!
 //! 算法：候选 = 含 `\documentclass` 且不被任何文件 `\input`/`\include` 引用的 .tex。
 //!
-//! 已知局限（ADR-0009，故意接受）：
-//! - 注释里的 `\input` 会误报；
-//! - `\includeonly` 未处理；
-//! - 编码假定 UTF-8。
+//! 已知局限（ADR-0009，故意接受）：注释里的 `\input` 会误报；
+//! `\includeonly` 未处理；编码假定 UTF-8。
 //! 逃生门：项目 settings.json 的 `root_file` 手动覆盖。
 
 use super::model::{RootCandidate, RootResolution};

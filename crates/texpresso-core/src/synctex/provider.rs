@@ -83,8 +83,8 @@ mod tests {
         SyncTeX result begin\n\
         Output:/home/u/proj/main.pdf\n\
         Page:1\n\
-        x:337.123123\n\
-        y:720.998123\n\
+        x:337.1231\n\
+        y:720.9981\n\
         h:100.000000\n\
         v:50.000000\n\
         W:400.000000\n\
@@ -97,8 +97,8 @@ mod tests {
     fn parse_forward_sample() {
         let pos = parse_forward_output(FORWARD_SAMPLE).unwrap();
         assert_eq!(pos.page, 1);
-        assert!((pos.x - 337.123123).abs() < 1e-4);
-        assert!((pos.y - 720.998123).abs() < 1e-4);
+        assert!((pos.x - 337.1231).abs() < 1e-4);
+        assert!((pos.y - 720.9981).abs() < 1e-4);
     }
 
     #[test]
