@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "texpresso",
+  "productName": "TeXPresso",
   "version": "0.1.0",
   "identifier": "com.texpresso.app",
   "build": {
@@ -12,13 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "texpresso",
-        "width": 800,
-        "height": 600
+        "title": "TeXPresso",
+        "width": 1280,
+        "height": 800
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost blob: data:; font-src 'self' data:; object-src 'none'"
     }
   },
   "bundle": {

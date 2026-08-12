@@ -1,169 +1,141 @@
+<!-- 应用壳（modules.md §3）：三栏布局 + 底部错误列表 + 状态栏，自研 splitter。 -->
 <script setup lang="ts">
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { onBeforeUnmount, onMounted, ref } from "vue";
+import { open } from "@tauri-apps/plugin-dialog";
+import SplitPane from "./components/SplitPane.vue";
+import FileTree from "./components/FileTree.vue";
+import TabBar from "./components/TabBar.vue";
+import EditorPane from "./components/EditorPane.vue";
+import PreviewPane from "./components/PreviewPane.vue";
+import ErrorList from "./components/ErrorList.vue";
+import StatusBar from "./components/StatusBar.vue";
+import { useProjectStore } from "./stores/project";
+import { useEditorStore } from "./stores/editor";
+import { useSettingsStore } from "./stores/settings";
+import { useCompileStore } from "./stores/compile";
+import { useAutoSave } from "./composables/useAutoSave";
+import { ipc } from "./services/ipc";
+import { subscribeEvents } from "./services/events";
 
-const greetMsg = ref("");
-const name = ref("");
+const project = useProjectStore();
+const editor = useEditorStore();
+const settings = useSettingsStore();
+const compile = useCompileStore();
+const autoSave = useAutoSave();
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+const cursorLine = ref(0);
+const cursorCol = ref(0);
+
+let unsubscribe: (() => void) | null = null;
+
+onMounted(async () => {
+  unsubscribe = subscribeEvents();
+  await settings.init();
+});
+
+onBeforeUnmount(() => unsubscribe?.());
+
+/** 打开项目（dialog 选文件夹）。 */
+async function chooseProject() {
+  const dir = await open({ directory: true, title: "打开 TeX 项目文件夹" });
+  if (!dir) return;
+  try {
+    const info = await project.openProject(dir);
+    if (info.root_file) {
+      await editor.openFile(info.root_file);
+    } else {
+      // 多候选/零候选：v1 提示手动选择根文件
+      console.warn("未探测到唯一根文件，请在设置中手动指定 root_file");
+    }
+  } catch (e) {
+    console.error("打开项目失败：", e);
+  }
 }
 
-const doc = ref("");
-const statusMsg = ref("");
-async function checkCompile() {
-  statusMsg.value = await invoke("compile_status", { document: doc.value });
+function onEditorChange(_path: string) {
+  autoSave.schedule();
 }
+
+async function manualCompile() {
+  try {
+    await ipc.compileNow();
+  } catch (e) {
+    console.error("手动编译失败：", e);
+  }
+}
+
+async function abort() {
+  await ipc.abortCompile();
+}
+
+const isRunning = () => compile.phase === "running" || compile.phase === "queued";
 </script>
 
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
-
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
+  <div class="app">
+    <div class="toolbar">
+      <button class="btn" @click="chooseProject">📂 打开项目</button>
+      <button class="btn primary" :disabled="isRunning()" @click="manualCompile">▶ 编译</button>
+      <button class="btn" :disabled="!isRunning()" @click="abort">■ 终止</button>
+      <span class="title">{{ project.project ? project.project.root : "TeXPresso" }}</span>
     </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-    <input v-model="doc" placeholder="粘贴一段 LaTeX..." />
-    <button @click="checkCompile">模拟编译</button>
-    <p>{{ statusMsg }}</p>
-  </main>
+    <div class="main">
+      <SplitPane direction="vertical" :initial="0.2">
+        <template #primary>
+          <FileTree />
+        </template>
+        <template #secondary>
+          <SplitPane direction="horizontal" :initial="0.65">
+            <template #primary>
+              <div class="editor-area">
+                <TabBar />
+                <EditorPane
+                  @change="onEditorChange"
+                  @cursor="(l: number, c: number) => { cursorLine = l; cursorCol = c }"
+                />
+              </div>
+            </template>
+            <template #secondary>
+              <PreviewPane />
+            </template>
+          </SplitPane>
+        </template>
+      </SplitPane>
+    </div>
+
+    <div class="bottom">
+      <SplitPane direction="horizontal" :initial="0.7">
+        <template #primary>
+          <div class="error-area"><ErrorList /></div>
+        </template>
+        <template #secondary>
+          <div class="placeholder">大纲（后置）</div>
+        </template>
+      </SplitPane>
+    </div>
+
+    <StatusBar :cursor-line="cursorLine" :cursor-col="cursorCol" />
+  </div>
 </template>
 
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
 <style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+html, body, #app { height: 100%; margin: 0; }
+body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #1e1e1e; color: #ccc; }
+</style>
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
+<style scoped>
+.app { display: flex; flex-direction: column; height: 100%; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #252526; border-bottom: 1px solid #333; }
+.btn { background: #3a3d41; border: none; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn:hover:not(:disabled) { background: #45484c; }
+.btn.primary { background: #0e639c; color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.title { margin-left: 8px; font-size: 12px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.main { flex: 1 1 auto; min-height: 0; }
+.bottom { flex: 0 0 160px; min-height: 0; border-top: 1px solid #333; }
+.editor-area { display: flex; flex-direction: column; height: 100%; }
+.editor-area > :last-child { flex: 1; min-height: 0; }
+.error-area { height: 100%; }
+.placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 12px; }
 </style>

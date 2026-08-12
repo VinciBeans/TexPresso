@@ -1,0 +1,3 @@
+# 复用 src-tauri/target 缓存（模板期已编译过 tauri 全家桶，避免全量重编）
+[build]
+target-dir = "src-tauri/target"
