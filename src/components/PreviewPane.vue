@@ -3,8 +3,8 @@
    SyncTeX：高亮 overlay 绘制；点击反向定位。 -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import * as pdfjsLib from "pdfjs-dist";
-import { ipc } from "../services/ipc";
 import { usePreviewStore } from "../stores/preview";
 import { useSyncTex } from "../composables/useSyncTex";
 
@@ -48,7 +48,7 @@ async function load() {
   const keepPage = currentPage;
   const keepScroll = scrollTop;
   try {
-    const data = await ipc.readPdf(path);
+    const data = await fetch(convertFileSrc(path)).then((r) => r.arrayBuffer());
     loadingTask?.destroy().catch(() => {});
     // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）；
     // 必须绝对 URL：worker 内相对路径会基于 worker 脚本 URL（asset 协议）解析导致 404

@@ -224,15 +224,6 @@ async fn save_content(state: &AppState, path: &Path, content: &str) -> Result<()
     Ok(())
 }
 
-/// 读取 PDF 原始字节（预览用，绕开 asset 协议在 WebKitGTK 下 fetch 不可靠的问题）。
-/// 不标 #[specta::specta]：返回 tauri::ipc::Response（原始字节），前端手写封装。
-#[tauri::command]
-pub async fn read_pdf(path: String, state: State<'_, AppState>) -> Result<tauri::ipc::Response, CmdError> {
-    let path = validate_in_project(&state, Path::new(&path)).await?;
-    let bytes = tokio::fs::read(&path).await?;
-    Ok(tauri::ipc::Response::new(bytes))
-}
-
 // ---------------------------------------------------------------- 编译
 
 #[tauri::command]
