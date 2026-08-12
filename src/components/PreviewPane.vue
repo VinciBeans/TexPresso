@@ -12,6 +12,9 @@ const preview = usePreviewStore();
 const { inverse } = useSyncTex();
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
+// 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）
+pdfjsLib.GlobalWorkerOptions.cMapUrl = "/pdfjs/cmaps/";
+pdfjsLib.GlobalWorkerOptions.cMapPacked = true;
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
