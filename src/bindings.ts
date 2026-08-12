@@ -157,6 +157,7 @@ export type SettingsPatch_Serialize = {
 export type SourcePositionDto = {
 	file: string,
 	line: number,
+	/**  列号；-1 = 未知（synctex 1.21 输出契约）。 */
 	column: number,
 };
 

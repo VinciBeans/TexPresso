@@ -285,7 +285,7 @@ pub async fn synctex_forward(
     let src = SourcePosition {
         file: PathBuf::from(&file),
         line,
-        column,
+        column: column as i32,
     };
     state
         .sync
