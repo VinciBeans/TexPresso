@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "window-state:default"
+    "window-state:default",
+    "dialog:default"
   ]
 }
