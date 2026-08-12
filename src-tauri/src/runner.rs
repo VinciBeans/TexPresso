@@ -128,3 +128,203 @@ fn kill_tree(pid: u32) {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    //! 真实环境集成测试（`#[ignore]`：需要系统安装 latexmk + synctex）。
+    //!
+    //! 在有 TeX Live/MiKTeX 的机器上运行：`cargo test -p texpresso -- --ignored`
+    //! 这是 Windows 验收清单的自动化抓手（modules.md §8），验证：
+    //! - latexmk 真实编译全链路（命令构造/产物位置/PDF 拷贝）；
+    //! - 内容错误 → .log 解析链路；
+    //! - 超时树杀 / 取消终止；
+    //! - SyncTeX CLI 输出契约（ADR-0008 最大风险点）。
+
+    use super::*;
+    use crate::sync_cli::SyncTexCli;
+    use std::time::Duration;
+    use texpresso_core::synctex::{SourcePosition, SyncTexProvider, SyncTexPosition};
+
+    struct TempProject {
+        dir: std::path::PathBuf,
+    }
+
+    impl TempProject {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("texpresso-it-{name}-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).expect("创建临时项目失败");
+            Self { dir }
+        }
+
+        fn put(&self, rel: &str, content: &str) {
+            let p = self.dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, content).unwrap();
+        }
+    }
+
+    impl Drop for TempProject {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn latexmk_available() -> bool {
+        std::process::Command::new("latexmk")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    fn req(project: &TempProject) -> CompileRequest {
+        CompileRequest {
+            root_file: project.dir.join("main.tex"),
+            project_root: project.dir.clone(),
+            engine: texpresso_core::types::Engine::XeLaTeX,
+            timeout: Duration::from_secs(60),
+        }
+    }
+
+    /// 成功路径：编译 → PDF 拷贝到项目根 + tmp/ 中间文件 + SyncTeX 双向可用。
+    #[tokio::test]
+    #[ignore]
+    async fn compile_success_and_synctex() {
+        if !latexmk_available() {
+            eprintln!("跳过：系统未安装 latexmk（需要 TeX Live/MiKTeX）");
+            return;
+        }
+        let project = TempProject::new("success");
+        project.put(
+            "main.tex",
+            "\\documentclass{article}\n\\begin{document}\nHello TeXPresso\n\\end{document}\n",
+        );
+
+        let runner = LatexmkRunner {
+            fs: std::sync::Arc::new(crate::fs_impl::TokioFs),
+        };
+        let outcome = runner
+            .compile(req(&project), tokio_util::sync::CancellationToken::new())
+            .await;
+
+        match outcome {
+            CompileOutcome::Success { pdf_path } => {
+                assert_eq!(pdf_path, project.dir.join("main.pdf"));
+                assert!(pdf_path.exists(), "PDF 应拷贝到项目根");
+                assert!(project.dir.join("tmp/main.log").exists(), "中间文件应收纳在 tmp/");
+                assert!(
+                    project.dir.join("tmp/main.synctex.gz").exists(),
+                    "-synctex=1 应产出 synctex 文件"
+                );
+
+                // SyncTeX CLI 输出契约实测（ADR-0008 风险落地）
+                if std::process::Command::new("synctex").arg("--version").output().is_err() {
+                    eprintln!("跳过 SyncTeX 断言：未安装 synctex");
+                    return;
+                }
+                let cli = SyncTexCli;
+                let pos = cli
+                    .forward(
+                        &SourcePosition {
+                            file: project.dir.join("main.tex"),
+                            line: 3,
+                            column: 1,
+                        },
+                        &pdf_path,
+                    )
+                    .await
+                    .expect("正向定位应成功");
+                assert!(pos.page >= 1);
+
+                let back = cli
+                    .inverse(
+                        &SyncTexPosition { page: pos.page, x: pos.x, y: pos.y },
+                        &pdf_path,
+                    )
+                    .await
+                    .expect("反向定位应成功");
+                assert!(back.line >= 1);
+            }
+            other => panic!("预期成功，得到：{other:?}"),
+        }
+    }
+
+    /// 内容错误路径：非零退出 → .log 解析 → ContentError。
+    #[tokio::test]
+    #[ignore]
+    async fn compile_content_error() {
+        if !latexmk_available() {
+            eprintln!("跳过：系统未安装 latexmk（需要 TeX Live/MiKTeX）");
+            return;
+        }
+        let project = TempProject::new("error");
+        project.put(
+            "main.tex",
+            "\\documentclass{article}\n\\begin{document}\n\\undefinedcommandhere\n\\end{document}\n",
+        );
+
+        let runner = LatexmkRunner {
+            fs: std::sync::Arc::new(crate::fs_impl::TokioFs),
+        };
+        let outcome = runner
+            .compile(req(&project), tokio_util::sync::CancellationToken::new())
+            .await;
+
+        match outcome {
+            CompileOutcome::ContentError { errors } => {
+                assert!(!errors.is_empty(), "应有解析出的错误条目");
+                assert!(errors.iter().any(|e| e.line.is_some()), "错误应带行号：{errors:?}");
+            }
+            other => panic!("预期内容错误，得到：{other:?}"),
+        }
+    }
+
+    /// 超时路径：1ms 超时必触发 → 树杀 → Timeout。
+    #[tokio::test]
+    #[ignore]
+    async fn compile_timeout_kills_tree() {
+        if !latexmk_available() {
+            eprintln!("跳过：系统未安装 latexmk（需要 TeX Live/MiKTeX）");
+            return;
+        }
+        let project = TempProject::new("timeout");
+        project.put(
+            "main.tex",
+            "\\documentclass{article}\n\\begin{document}\nBig\n\\end{document}\n",
+        );
+
+        let runner = LatexmkRunner {
+            fs: std::sync::Arc::new(crate::fs_impl::TokioFs),
+        };
+        let mut request = req(&project);
+        request.timeout = Duration::from_millis(1); // 必超时
+        let outcome = runner
+            .compile(request, tokio_util::sync::CancellationToken::new())
+            .await;
+        assert_eq!(outcome, CompileOutcome::Timeout);
+    }
+
+    /// 取消路径：提前取消 → Aborted。
+    #[tokio::test]
+    #[ignore]
+    async fn compile_cancel_aborts() {
+        if !latexmk_available() {
+            eprintln!("跳过：系统未安装 latexmk（需要 TeX Live/MiKTeX）");
+            return;
+        }
+        let project = TempProject::new("cancel");
+        project.put(
+            "main.tex",
+            "\\documentclass{article}\n\\begin{document}\nBig\n\\end{document}\n",
+        );
+
+        let runner = LatexmkRunner {
+            fs: std::sync::Arc::new(crate::fs_impl::TokioFs),
+        };
+        let cancel = tokio_util::sync::CancellationToken::new();
+        cancel.cancel(); // 立即取消
+        let outcome = runner.compile(req(&project), cancel).await;
+        assert_eq!(outcome, CompileOutcome::Aborted);
+    }
+}
