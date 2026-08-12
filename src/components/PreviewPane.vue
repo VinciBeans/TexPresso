@@ -12,9 +12,6 @@ const preview = usePreviewStore();
 const { inverse } = useSyncTex();
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
-// 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）
-pdfjsLib.GlobalWorkerOptions.cMapUrl = "/pdfjs/cmaps/";
-pdfjsLib.GlobalWorkerOptions.cMapPacked = true;
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -47,7 +44,12 @@ async function load() {
   try {
     const data = await fetch(convertFileSrc(path)).then((r) => r.arrayBuffer());
     loadingTask?.destroy().catch(() => {});
-    loadingTask = pdfjsLib.getDocument({ data });
+    // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）
+    loadingTask = pdfjsLib.getDocument({
+      data,
+      cMapUrl: "/pdfjs/cmaps/",
+      cMapPacked: true,
+    });
     doc = await loadingTask.promise;
     currentPage = Math.min(keepPage, doc.numPages);
     await renderPage(currentPage);
