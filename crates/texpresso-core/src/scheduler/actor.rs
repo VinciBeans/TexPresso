@@ -89,24 +89,29 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    /// 启动调度器任务，返回句柄。runner 与 emitter 均须 'static（任务持有）。
-    pub fn spawn(runner: Arc<dyn CompileRunner>, emitter: Emitter) -> SchedulerHandle {
+    /// 构造调度器（不假设 runtime 上下文——由接线方决定如何运行，见 [`Scheduler::run`]）。
+    ///
+    /// 返回（外部句柄, 调度器本体）：调用方负责 `spawn(scheduler.run())`，
+    /// 例如 src-tauri 用 `tauri::async_runtime::spawn`，测试用 `tokio::spawn`。
+    /// 这样 core 不依赖任何特定 runtime 的存在（修复：Tauri setup 非 tokio 上下文）。
+    pub fn create(
+        runner: Arc<dyn CompileRunner>,
+        emitter: Emitter,
+    ) -> (SchedulerHandle, Scheduler) {
         let (tx, rx) = mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            let mut s = Scheduler {
-                rx,
-                runner,
-                emitter,
-                queue: Queue::new(),
-                running: None,
-                cancel: None,
-            };
-            s.run().await;
-        });
-        SchedulerHandle { tx }
+        let scheduler = Scheduler {
+            rx,
+            runner,
+            emitter,
+            queue: Queue::new(),
+            running: None,
+            cancel: None,
+        };
+        (SchedulerHandle { tx }, scheduler)
     }
 
-    async fn run(&mut self) {
+    /// 主循环：由接线方在合适的 runtime 上 spawn。
+    pub async fn run(mut self) {
         while let Some(cmd) = self.next().await {
             self.handle(cmd).await;
         }
@@ -253,7 +258,8 @@ mod tests {
     fn setup(runner: FakeRunner) -> (SchedulerHandle, Arc<EventLog>, Arc<FakeRunner>) {
         let runner = Arc::new(runner);
         let log = Arc::new(EventLog::new());
-        let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+        let (handle, scheduler) = Scheduler::create(runner.clone(), event_log_emitter(log.clone()));
+        tokio::spawn(scheduler.run());
         (handle, log, runner)
     }
 
