@@ -1,7 +1,7 @@
 # TeXPresso 设计文档
 
 > 项目状态：**设计收敛**（grill-with-docs 会话产出），待开工。
-> 术语见根目录 [CONTEXT.md](../CONTEXT.md)，决策记录见 [ADR 目录](./adr/)。
+> 术语见根目录 [CONTEXT.md](../CONTEXT.md)，决策记录见 [ADR 目录](./adr/)，分层/接口/技术栈见 [architecture.md](./architecture.md)，函数级设计见 [modules.md](./modules.md)。
 
 ## 产品定位
 
@@ -103,4 +103,4 @@
 
 ## 后置/未决清单
 
-多窗口与多项目 ｜ 外部查看器 ｜ TinyTeX 捆绑 ｜ 引擎语言自适应规则 ｜ 自动更新 ｜ 代码签名证书 ｜ 增量编译具体策略（MVP 后首要设计任务）
+多窗口与多项目 ｜ 外部查看器 ｜ TinyTeX 捆绑 ｜ 引擎语言自适应规则 ｜ 自动更新 ｜ 代码签名证书 ｜ 增量编译具体策略（MVP 后首要设计任务） ｜ LSP 具体集成（monaco-languageclient 需专项研究） ｜ 冲突对话框 ｜ 多面板布局
