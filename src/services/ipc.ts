@@ -1,6 +1,7 @@
 // 服务层（modules.md §9.1）：唯一碰 IPC 的层。
 // 命令类型由 tauri-specta 自动生成（src/bindings.ts），本文件只做结果解包。
 
+import { invoke } from "@tauri-apps/api/core";
 import { commands, type CmdError } from "../bindings";
 
 type Result<T> = Promise<{ status: "ok"; data: T } | { status: "error"; error: CmdError }>;
@@ -13,6 +14,8 @@ async function unwrap<T>(r: Result<T>): Promise<T> {
 }
 
 export const ipc = {
+  /** 读 PDF 原始字节（后端 read_pdf 命令，非 specta 生成）。 */
+  readPdf: (path: string): Promise<ArrayBuffer> => invoke("read_pdf", { path }),
   openProject: (folder: string) => unwrap(commands.openProject(folder)),
   listDir: (path: string) => unwrap(commands.listDir(path)),
   readFile: (path: string) => unwrap(commands.readFile(path)),

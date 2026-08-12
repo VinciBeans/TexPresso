@@ -3,8 +3,8 @@
    SyncTeX：高亮 overlay 绘制；点击反向定位。 -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import * as pdfjsLib from "pdfjs-dist";
+import { ipc } from "../services/ipc";
 import { usePreviewStore } from "../stores/preview";
 import { useSyncTex } from "../composables/useSyncTex";
 
@@ -21,6 +21,12 @@ let doc: pdfjsLib.PDFDocumentProxy | null = null;
 let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 let currentPage = 1;
 let scrollTop = 0;
+
+/** synctex 坐标（顶部起算）→ pdf.js PDF 坐标（底部起算）。 */
+async function toPdfPoint(page: pdfjsLib.PDFPageProxy, x: number, yTop: number): Promise<[number, number]> {
+  const vp1 = page.getViewport({ scale: 1 });
+  return [x, vp1.height - yTop];
+}
 
 /** 渲染指定页到 canvas。 */
 async function renderPage(pageNum: number) {
@@ -42,7 +48,7 @@ async function load() {
   const keepPage = currentPage;
   const keepScroll = scrollTop;
   try {
-    const data = await fetch(convertFileSrc(path)).then((r) => r.arrayBuffer());
+    const data = await ipc.readPdf(path);
     loadingTask?.destroy().catch(() => {});
     // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）；
     // 必须绝对 URL：worker 内相对路径会基于 worker 脚本 URL（asset 协议）解析导致 404
@@ -86,8 +92,10 @@ watch(
       await renderPage(h.page);
     }
     const page = await doc.getPage(h.page);
+    // synctex 的 y 从页面顶部起算，pdf.js 的坐标从底部起算——翻转（2026-08 实测）
+    const pdfPt = await toPdfPoint(page, h.x, h.y);
     const viewport = page.getViewport({ scale: 1.5 });
-    const pt = viewport.convertToViewportPoint(h.x, h.y);
+    const pt = viewport.convertToViewportPoint(pdfPt[0], pdfPt[1]);
     box.style.display = "block";
     box.style.left = `${pt[0] - 25}px`;
     box.style.top = `${pt[1] - 10}px`;
@@ -104,8 +112,10 @@ async function onCanvasClick(e: MouseEvent) {
   const y = e.clientY - rect.top;
   const page = await doc.getPage(currentPage);
   const viewport = page.getViewport({ scale: 1.5 });
-  const pdfPt = viewport.convertToPdfPoint(x, y);
-  await inverse(currentPage, pdfPt[0], pdfPt[1]);
+  const clickPt = viewport.convertToPdfPoint(x, y);
+  // pdf.js 坐标底部起算 → synctex 顶部起算（翻转）
+  const vp1 = page.getViewport({ scale: 1 });
+  await inverse(currentPage, clickPt[0], vp1.height - clickPt[1]);
 }
 
 function onScroll(e: Event) {

@@ -35,6 +35,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(builder.invoke_handler())
+        .invoke_handler(tauri::generate_handler![commands::read_pdf])
         .setup(move |app| {
             builder.mount_events(app);
 
