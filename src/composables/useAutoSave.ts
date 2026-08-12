@@ -29,6 +29,7 @@ export function useAutoSave() {
     editor.markSaving(files.map((f) => f.path));
     try {
       await ipc.saveAll(files);
+      console.log("[AutoSave] 保存成功", files.map((f) => f.path.split("/").pop()));
       editor.markSaved(files.map((f) => f.path));
     } catch (e) {
       editor.rollbackSaving(files.map((f) => f.path));

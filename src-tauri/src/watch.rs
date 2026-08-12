@@ -112,6 +112,7 @@ pub fn spawn_watcher(
 
 /// 事件分类与路由（modules.md §7 过滤规则）。
 fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Option<&Path>) {
+    debug!("watch 原始事件: {:?} kind={:?}", event.paths, event.kind);
     let paths = normalize_event_paths(event);
     for path in paths {
         // 1. 设置文件（全局或项目）→ 热更新
@@ -120,11 +121,16 @@ fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Opt
             continue;
         }
         // 2. .tex（排除 tmp/、隐藏项）→ 编译触发 + 广播
-        let Some(root) = project_root else { continue };
+        let Some(root) = project_root else {
+            debug!("无项目根，跳过: {}", path.display());
+            continue;
+        };
         if is_ignored(&path, root) {
+            debug!("忽略路径: {}", path.display());
             continue;
         }
         if path.extension().and_then(|e| e.to_str()) == Some("tex") {
+            debug!("触发编译: {}", path.display());
             trigger_compile(&path, state.clone());
         }
         // 3. 其余（含非 .tex、目录变化）→ 文件树刷新广播
@@ -217,8 +223,11 @@ fn trigger_compile(path: &Path, state: Arc<WatchState>) {
             settings: &settings,
         };
         match compile_request_for_change(ctx, &path) {
-            Some(req) => state.scheduler.compile(req),
-            None => debug!("变化不触发编译：{}", path.display()),
+            Some(req) => {
+                debug!("构造编译请求: root={} engine={:?}", req.root_file.display(), req.engine);
+                state.scheduler.compile(req);
+            }
+            None => warn!("变化不触发编译：{}（root_file={:?}）", path.display(), project.root_file),
         }
     });
 }
