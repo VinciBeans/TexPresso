@@ -117,8 +117,17 @@ pub fn spawn_watcher(
 }
 
 /// 事件分类与路由（modules.md §7 过滤规则）。
+/// Access（打开/读取）事件不触发编译与树刷新——只有内容变化类事件才处理。
+fn should_process(event: &notify::Event) -> bool {
+    !matches!(event.kind, notify::EventKind::Access(_))
+}
+
 fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Option<&Path>) {
     info!("watch 原始事件: {:?} kind={:?}", event.paths, event.kind);
+    if !should_process(event) {
+        debug!("Access 事件跳过（不触发编译）");
+        return;
+    }
     let paths = normalize_event_paths(event);
     for path in paths {
         // 1. 设置文件（全局或项目）→ 热更新
