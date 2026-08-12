@@ -21,6 +21,8 @@ let doc: pdfjsLib.PDFDocumentProxy | null = null;
 let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 let currentPage = 1;
 let scrollTop = 0;
+/** 加载序号：并发 pdf-updated 时旧加载被取代（destroy 引发的 aborted 忽略）。 */
+let loadSeq = 0;
 
 /** synctex 坐标（顶部起算）→ pdf.js PDF 坐标（底部起算）。 */
 async function toPdfPoint(page: pdfjsLib.PDFPageProxy, x: number, yTop: number): Promise<[number, number]> {
@@ -43,6 +45,7 @@ async function renderPage(pageNum: number) {
 
 /** 加载 PDF；带页码/滚动恢复。 */
 async function load() {
+  const mySeq = ++loadSeq;
   const path = preview.pdfPath;
   console.log("[Preview] load() 被调用 →", path, "reloadKey =", preview.reloadKey);
   if (!path) return;
@@ -64,14 +67,17 @@ async function load() {
     });
     doc = await loadingTask.promise;
     console.log("[Preview] getDocument 完成 pages =", doc.numPages);
+    if (mySeq !== loadSeq) return; // 已被更新的加载取代
     currentPage = Math.min(keepPage, doc.numPages);
     await renderPage(currentPage);
     console.log("[Preview] 首帧渲染完成");
+    if (mySeq !== loadSeq) return;
     if (container.value) container.value.scrollTop = keepScroll;
     // 恢复后再渲染一次（字体加载可能改变布局）
     await renderPage(currentPage);
     console.log("[Preview] 渲染全部完成");
   } catch (e) {
+    if (mySeq !== loadSeq) return; // 被取代的加载（destroy 引发 aborted）忽略
     console.error("PDF 加载失败：", e);
   }
 }
