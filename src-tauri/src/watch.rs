@@ -101,10 +101,13 @@ pub fn spawn_watcher(
                 }
             }
 
-            // 阻塞等事件
-            match event_rx.recv() {
+            // 阻塞等事件（带超时：定期醒来处理命令通道——
+            // 修复：此前 recv() 无限阻塞，SetProjectRoot 命令永远得不到处理，
+            // 项目根从未注册，watch 链路静默失效）
+            match event_rx.recv_timeout(std::time::Duration::from_millis(100)) {
                 Ok(Ok(event)) => handle_event(&event, state.clone(), project_root.as_deref()),
                 Ok(Err(e)) => warn!("notify 事件错误：{e}"),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(_) => break, // 通道关闭
             }
         }
