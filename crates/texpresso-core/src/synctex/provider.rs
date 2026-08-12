@@ -152,17 +152,6 @@ mod tests {
     /// synctex 1.21 实测输出（2026-08 WSL）：`Input:` 前缀（ADR-0008 风险落地）。
     #[test]
     fn parse_inverse_input_prefix_from_real_cli() {
-        let text = "This is SyncTeX command line utility, version 1.5\n\
-            SyncTeX result begin\n\
-            Output:main.pdf\n\
-            Input:/home/u/proj/tmp/main.bbl\n\
-            Line:8\n\
-            Column:-1\n\
-            Offset:0\n\
-            Context:\n\
-            SyncTeX result end\n";
-        // 注：`\` 续行会连接行首空白，因此上面的字面量实际是每行前带缩进的单行文本；
-        // 改用显式拼接验证多行解析：
         let text = [
             "This is SyncTeX command line utility, version 1.5",
             "SyncTeX result begin",

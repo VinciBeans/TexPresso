@@ -47,16 +47,12 @@ async function renderPage(pageNum: number) {
 async function load() {
   const mySeq = ++loadSeq;
   const path = preview.pdfPath;
-  console.log("[Preview] load() 被调用 →", path, "reloadKey =", preview.reloadKey);
   if (!path) return;
   const keepPage = currentPage;
   const keepScroll = scrollTop;
   try {
-    console.log("[Preview] fetch 开始");
     const resp = await fetch(convertFileSrc(path));
-    console.log("[Preview] fetch 完成 status =", resp.status);
     const data = await resp.arrayBuffer();
-    console.log("[Preview] arrayBuffer 字节数 =", data.byteLength);
     loadingTask?.destroy().catch(() => {});
     // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）；
     // 必须绝对 URL：worker 内相对路径会基于 worker 脚本 URL（asset 协议）解析导致 404
@@ -66,16 +62,13 @@ async function load() {
       cMapPacked: true,
     });
     doc = await loadingTask.promise;
-    console.log("[Preview] getDocument 完成 pages =", doc.numPages);
     if (mySeq !== loadSeq) return; // 已被更新的加载取代
     currentPage = Math.min(keepPage, doc.numPages);
     await renderPage(currentPage);
-    console.log("[Preview] 首帧渲染完成");
     if (mySeq !== loadSeq) return;
     if (container.value) container.value.scrollTop = keepScroll;
     // 恢复后再渲染一次（字体加载可能改变布局）
     await renderPage(currentPage);
-    console.log("[Preview] 渲染全部完成");
   } catch (e) {
     if (mySeq !== loadSeq) return; // 被取代的加载（destroy 引发 aborted）忽略
     console.error("PDF 加载失败：", e);

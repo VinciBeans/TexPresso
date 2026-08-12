@@ -5,3 +5,4 @@ MVP 需双向 SyncTeX（design.md v1 必须），但 Rust 生态**无维护中�
 - **状态**：已接受
 - **备选方案**：自研 Rust 解析器（否决：格式官方明言"不应视为公开"，漂移风险；留作 CLI 出问题时的替换路径）；内嵌 C 解析器（TeXstudio 做法，否决：引入 C 工具链）；synctex_sys FFI（否决：休眠且 unsafe）
 - **影响**：`-synctex=1` 进 latexmk 命令；CLI 指向 `tmp/` 下的 .synctex.gz；`synctex` 模块在 core、`sync_cli` 在 src-tauri
+- **实测落地（2026-08，WSL TeX Live synctex 1.21）**：① synctex 数据在 `tmp/` 而 PDF 在项目根，必须传 `-d <tmp 目录>` 参数，否则报 "No SyncTeX available"；② `edit` 输出源文件行前缀是 `Input:`（非 `File:`），解析器两者兼容；③ `Column` 可为 `-1`（未知列），类型用 i32；④ 坐标从页面左上起算，与 pdf.js 右下起算需翻转

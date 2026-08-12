@@ -242,7 +242,7 @@ pub async fn compile_now(state: State<'_, AppState>) -> Result<(), CmdError> {
     };
     match compile_request_manual(ctx) {
         Some(req) => {
-            info!("手动编译: root={}", req.root_file.display());
+            debug!("手动编译: root={}", req.root_file.display());
             state.scheduler.compile(req);
             Ok(())
         }

@@ -14,7 +14,6 @@ export function subscribeEvents(): () => void {
   unlisteners.push(
     events.compileStatus.listen((e) => {
       const dto = e.payload as any;
-      console.log("[Event] compile-status →", dto.phase, dto.kind);
       useCompileStore().setStatus(dto.phase, dto.kind);
     }),
     events.errorsUpdated.listen((e) => {
@@ -22,7 +21,6 @@ export function subscribeEvents(): () => void {
     }),
     events.pdfUpdated.listen((e) => {
       const p = e.payload as any;
-      console.log("[Event] pdf-updated 到达 →", p.path);
       usePreviewStore().onPdfUpdated(p.path as string);
     }),
     events.filesChanged.listen((e) => {

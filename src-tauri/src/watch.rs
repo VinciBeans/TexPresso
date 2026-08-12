@@ -15,7 +15,7 @@ use texpresso_core::settings::Settings;
 use texpresso_core::types::FilesChanged; // 保留：broadcast_files_changed 用
 use tauri_specta::Event;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// 监视任务命令（模块间通信只经此通道，信息局部性）。
 pub enum WatchCommand {
@@ -55,7 +55,7 @@ pub fn spawn_watcher(
     std::thread::spawn(move || {
         use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-        info!("watch 线程启动");
+        debug!("watch 线程启动");
         let (event_tx, event_rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
         let mut watcher: RecommendedWatcher =
             match notify::recommended_watcher(move |res| {
@@ -67,7 +67,7 @@ pub fn spawn_watcher(
                     return;
                 }
             };
-        info!("notify watcher 初始化成功");
+        debug!("notify watcher 初始化成功");
 
         // 固定监视全局设置目录（热更新，modules.md §6）
         if let Err(e) = watcher.watch(&global_settings_dir, RecursiveMode::NonRecursive) {
@@ -81,14 +81,14 @@ pub fn spawn_watcher(
             while let Ok(cmd) = rx.try_recv() {
                 match cmd {
                     WatchCommand::SetProjectRoot(Some(root)) => {
-                        info!("watch 命令：切换项目根 → {}", root.display());
+                        debug!("watch 命令：切换项目根 → {}", root.display());
                         if let Some(old) = &project_root {
                             let _ = watcher.unwatch(old);
                         }
                         match watcher.watch(&root, RecursiveMode::Recursive) {
                             Ok(()) => {
                                 project_root = Some(root);
-                                info!("开始监视项目：{}", project_root.as_ref().unwrap().display());
+                                debug!("开始监视项目：{}", project_root.as_ref().unwrap().display());
                             }
                             Err(e) => warn!("监视项目失败（{}）：{e}", root.display()),
                         }
@@ -123,7 +123,7 @@ fn should_process(event: &notify::Event) -> bool {
 }
 
 fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Option<&Path>) {
-    info!("watch 原始事件: {:?} kind={:?}", event.paths, event.kind);
+    debug!("watch 原始事件: {:?} kind={:?}", event.paths, event.kind);
     if !should_process(event) {
         debug!("Access 事件跳过（不触发编译）");
         return;

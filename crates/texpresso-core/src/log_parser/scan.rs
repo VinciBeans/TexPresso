@@ -225,6 +225,27 @@ l.5 \usepackage{nope}
         insta::assert_debug_snapshot!(parse_log(log));
     }
 
+    /// 真实场景：\input 的子文件含 \documentclass（2026-08 实测：错误雪崩 + 溢出）。
+    #[test]
+    fn snapshot_error_avalanche_log() {
+        let log = r#"Latexmk: Run number 1 of rule 'xelatex'
+(./main.tex
+(./chapters/intro.tex
+! LaTeX Error: Can be used only in preamble.
+l.1 \documentclass
+
+? 
+! LaTeX Error: Can be used only in preamble.
+l.5 \usepackage{amsmath}
+
+? 
+! TeX capacity exceeded, sorry [text input levels=15].
+<argument> ...efore}\@@input "chapters/intro.tex"
+l.17 \input{chapters/intro}
+"#;
+        insta::assert_debug_snapshot!(parse_log(log));
+    }
+
     /// 真实感样例：仅警告（快照测试）。
     #[test]
     fn snapshot_warning_only_log() {

@@ -25,11 +25,9 @@ export function useAutoSave() {
       .map((p) => ({ path: p, content: editor.buffers.get(p) ?? "" }))
       .filter((f) => editor.buffers.has(f.path));
     // 乐观记录（竞态修复：files-changed 可能先于 saveAll 返回到达）
-    console.log("[AutoSave] 保存 →", files.map((f) => f.path.split("/").pop() + ":" + JSON.stringify(f.content.slice(0, 20))));
     editor.markSaving(files.map((f) => f.path));
     try {
       await ipc.saveAll(files);
-      console.log("[AutoSave] 保存成功", files.map((f) => f.path.split("/").pop()));
       editor.markSaved(files.map((f) => f.path));
     } catch (e) {
       editor.rollbackSaving(files.map((f) => f.path));
