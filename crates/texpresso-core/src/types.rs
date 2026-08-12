@@ -99,6 +99,13 @@ pub struct FilesChanged {
     pub paths: Vec<String>,
 }
 
+/// 文件写入载荷（save_all 命令输入）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct FileContent {
+    pub path: String,
+    pub content: String,
+}
+
 /// 打开项目后的项目信息（open_project 命令输出）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ProjectInfo {

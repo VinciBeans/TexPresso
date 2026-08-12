@@ -35,7 +35,7 @@ pub fn compile_request_for_change(ctx: ComposeContext<'_>, changed: &Path) -> Op
         root_file: root_file.clone(),
         project_root: ctx.project.root.clone(),
         engine: ctx.settings.compile.engine,
-        timeout: Duration::from_secs(ctx.settings.compile.timeout_secs),
+        timeout: Duration::from_secs(u64::from(ctx.settings.compile.timeout_secs)),
     })
 }
 
@@ -46,7 +46,7 @@ pub fn compile_request_manual(ctx: ComposeContext<'_>) -> Option<CompileRequest>
         root_file: root_file.clone(),
         project_root: ctx.project.root.clone(),
         engine: ctx.settings.compile.engine,
-        timeout: Duration::from_secs(ctx.settings.compile.timeout_secs),
+        timeout: Duration::from_secs(u64::from(ctx.settings.compile.timeout_secs)),
     })
 }
 

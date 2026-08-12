@@ -3864,7 +3864,21 @@ dependencies = [
  "specta-typescript",
  "specta-util",
  "tauri",
+ "tauri-specta-macros",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "tauri-specta-macros"
+version = "2.0.0-rc.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a59dfdce06c98d8d211619bea5fdb39486d8a8c558e12b2d2ce255972320012"
+dependencies = [
+ "darling",
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3946,6 +3960,7 @@ dependencies = [
  "notify",
  "serde",
  "serde_json",
+ "specta",
  "specta-typescript",
  "tauri",
  "tauri-build",
@@ -3954,6 +3969,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tauri-specta",
  "texpresso-core",
+ "thiserror 2.0.20",
  "tokio",
  "tokio-util",
  "tracing",

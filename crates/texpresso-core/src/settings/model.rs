@@ -15,8 +15,8 @@ pub const SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CompileSettings {
     pub mode: CompileMode,
-    pub debounce_ms: u64,
-    pub timeout_secs: u64,
+    pub debounce_ms: u32,
+    pub timeout_secs: u32,
     pub engine: Engine,
 }
 
@@ -63,9 +63,9 @@ pub struct CompileOverrides {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<CompileMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub debounce_ms: Option<u64>,
+    pub debounce_ms: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_secs: Option<u64>,
+    pub timeout_secs: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<Engine>,
 }
@@ -78,9 +78,9 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<CompileMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub debounce_ms: Option<u64>,
+    pub debounce_ms: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_secs: Option<u64>,
+    pub timeout_secs: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<Engine>,
     #[serde(
@@ -88,6 +88,7 @@ pub struct SettingsPatch {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_root_file_patch"
     )]
+    #[specta(type = Option<Option<PathBuf>>)]
     pub root_file: Option<Option<PathBuf>>,
 }
 

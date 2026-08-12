@@ -2,8 +2,8 @@
 
 use super::model::{ProjectOverrides, Settings};
 
-const TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u64> = 5..=600;
-const DEBOUNCE_MS_RANGE: std::ops::RangeInclusive<u64> = 100..=2000;
+const TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u32> = 5..=600;
+const DEBOUNCE_MS_RANGE: std::ops::RangeInclusive<u32> = 100..=2000;
 
 /// 校验合并后的有效设置；返回全部违规项（空 = 通过）。
 pub fn validate(s: &Settings) -> Result<(), Vec<String>> {
