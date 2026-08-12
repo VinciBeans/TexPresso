@@ -67,7 +67,9 @@ pub fn run() {
             let emitter = build_emitter(app.handle());
             let runner: Arc<dyn texpresso_core::scheduler::CompileRunner> =
                 Arc::new(runner::LatexmkRunner { fs: fs.clone() });
-            let scheduler = Scheduler::spawn(runner, emitter);
+            // setup 闭包不是 tokio 上下文：用 tauri 的 runtime（任何线程可用）
+            let (scheduler, scheduler_task) = Scheduler::create(runner, emitter);
+            tauri::async_runtime::spawn(scheduler_task.run());
 
             // 共享状态
             let project: Arc<RwLock<Option<texpresso_core::project::ProjectState>>> =

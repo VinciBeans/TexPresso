@@ -66,7 +66,8 @@ async fn open_detect_compile_full_chain() {
         pdf_path: PathBuf::from("proj/main.pdf"),
     }]));
     let log = Arc::new(EventLog::new());
-    let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+    let (handle, scheduler) = Scheduler::create(runner.clone(), event_log_emitter(log.clone()));
+    tokio::spawn(scheduler.run());
 
     handle.compile(req);
     wait_until(|| log.statuses().len() >= 2).await;
@@ -125,7 +126,8 @@ async fn continuous_typing_merges_to_latest() {
         CompileOutcome::Success { pdf_path: PathBuf::from("p.pdf") },
     ]));
     let log = Arc::new(EventLog::new());
-    let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+    let (handle, scheduler) = Scheduler::create(runner.clone(), event_log_emitter(log.clone()));
+    tokio::spawn(scheduler.run());
 
     // 模拟输入停顿间的三次自动保存（modules.md §5.1 触发链）
     for _ in 0..3 {
@@ -184,7 +186,8 @@ async fn error_then_fix_then_recover() {
         CompileOutcome::Success { pdf_path: PathBuf::from("proj/main.pdf") },
     ]));
     let log = Arc::new(EventLog::new());
-    let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+    let (handle, scheduler) = Scheduler::create(runner.clone(), event_log_emitter(log.clone()));
+    tokio::spawn(scheduler.run());
 
     let ctx = ComposeContext { project: &project, settings: &settings };
 
@@ -226,7 +229,8 @@ async fn abort_then_manual_compile() {
         CompileOutcome::Success { pdf_path: PathBuf::from("p.pdf") },
     ]));
     let log = Arc::new(EventLog::new());
-    let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+    let (handle, scheduler) = Scheduler::create(runner.clone(), event_log_emitter(log.clone()));
+    tokio::spawn(scheduler.run());
 
     handle.compile(compile_request_manual_for(&project, &settings));
     wait_until(|| runner.calls().len() == 1).await;
