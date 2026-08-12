@@ -1,0 +1,480 @@
+//! 调度器 actor（modules.md §2.5，设计决策 D1）。
+//!
+//! 状态收容：`queue`、`running`、`cancel` 全部是 task 私有字段——
+//! 调度状态没有任何一份在 task 之外。外部只有 [`SchedulerHandle`]，
+//! 连读都读不到（比锁状态机更彻底：无共享可变状态，自然无锁）。
+
+use super::policy::{decide, Decide};
+use super::queue::Queue;
+use super::runner::CompileRunner;
+use crate::types::{
+    CompileOutcome, CompilePhase, CompileRequest, CompileStatusDto, ErrorEntry, ErrorKind,
+};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+/// 事件输出：三个通道闭包（由 src-tauri 注入为 tauri 事件；测试注入收集器）。
+/// scheduler 不知道 tauri 存在（信息局部性：依赖注入而非全局）。
+pub struct Emitter {
+    on_status: Arc<dyn Fn(CompileStatusDto) + Send + Sync>,
+    on_errors: Arc<dyn Fn(Vec<ErrorEntry>) + Send + Sync>,
+    on_pdf: Arc<dyn Fn(PathBuf) + Send + Sync>,
+}
+
+impl Emitter {
+    pub fn new(
+        on_status: Arc<dyn Fn(CompileStatusDto) + Send + Sync>,
+        on_errors: Arc<dyn Fn(Vec<ErrorEntry>) + Send + Sync>,
+        on_pdf: Arc<dyn Fn(PathBuf) + Send + Sync>,
+    ) -> Self {
+        Self {
+            on_status,
+            on_errors,
+            on_pdf,
+        }
+    }
+
+    pub(crate) fn status(&self, dto: CompileStatusDto) {
+        (self.on_status)(dto);
+    }
+
+    pub(crate) fn errors(&self, errors: Vec<ErrorEntry>) {
+        (self.on_errors)(errors);
+    }
+
+    pub(crate) fn pdf(&self, path: PathBuf) {
+        (self.on_pdf)(path);
+    }
+}
+
+/// 调度命令。`JobFinished` 是内部命令（pub(crate)）：外部无法伪造任务完成。
+pub(crate) enum SchedulerCommand {
+    Compile(CompileRequest),
+    Abort,
+    JobFinished(CompileOutcome),
+}
+
+/// 外部唯一入口：只暴露两个意图（编译 / 终止），不暴露内部状态。
+#[derive(Clone)]
+pub struct SchedulerHandle {
+    tx: mpsc::UnboundedSender<SchedulerCommand>,
+}
+
+impl SchedulerHandle {
+    pub fn compile(&self, req: CompileRequest) {
+        let _ = self.tx.send(SchedulerCommand::Compile(req));
+    }
+
+    pub fn abort(&self) {
+        let _ = self.tx.send(SchedulerCommand::Abort);
+    }
+}
+
+/// 运行中任务（重试计数是唯一跨调用信息，收在这里）。
+struct RunningJob {
+    request: CompileRequest,
+    attempt: u8,
+    handle: tokio::task::JoinHandle<CompileOutcome>,
+}
+
+pub struct Scheduler {
+    rx: mpsc::UnboundedReceiver<SchedulerCommand>,
+    runner: Arc<dyn CompileRunner>,
+    emitter: Emitter,
+    queue: Queue,
+    running: Option<RunningJob>,
+    cancel: Option<CancellationToken>,
+}
+
+impl Scheduler {
+    /// 启动调度器任务，返回句柄。runner 与 emitter 均须 'static（任务持有）。
+    pub fn spawn(runner: Arc<dyn CompileRunner>, emitter: Emitter) -> SchedulerHandle {
+        let (tx, rx) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let mut s = Scheduler {
+                rx,
+                runner,
+                emitter,
+                queue: Queue::new(),
+                running: None,
+                cancel: None,
+            };
+            s.run().await;
+        });
+        SchedulerHandle { tx }
+    }
+
+    async fn run(&mut self) {
+        while let Some(cmd) = self.next().await {
+            self.handle(cmd).await;
+        }
+    }
+
+    /// 运行中：select 命令通道与任务完成；空闲：只等命令。
+    async fn next(&mut self) -> Option<SchedulerCommand> {
+        if let Some(job) = self.running.as_mut() {
+            tokio::select! {
+                cmd = self.rx.recv() => cmd,
+                out = &mut job.handle => Some(match out {
+                    Ok(outcome) => SchedulerCommand::JobFinished(outcome),
+                    Err(e) => SchedulerCommand::JobFinished(CompileOutcome::IoError {
+                        message: format!("编译任务异常终止：{e}"),
+                    }),
+                }),
+            }
+        } else {
+            self.rx.recv().await
+        }
+    }
+
+    async fn handle(&mut self, cmd: SchedulerCommand) {
+        match cmd {
+            SchedulerCommand::Compile(req) => {
+                if self.running.is_none() {
+                    self.start(req, 0);
+                } else {
+                    // 合并：最多一个等待条目，总是最新
+                    // 事件纪律：仅当队列从空变非空才广播 Queued（状态无变化不重复发）
+                    let was_empty = self.queue.is_empty();
+                    self.queue.push(req);
+                    if was_empty {
+                        self.emitter.status(CompileStatusDto {
+                            phase: CompilePhase::Queued,
+                            kind: None,
+                        });
+                    }
+                }
+            }
+            SchedulerCommand::Abort => {
+                // 手动终止：停运行 + 清队列（design.md）
+                if let Some(c) = self.cancel.take() {
+                    c.cancel();
+                }
+                self.queue.clear();
+            }
+            SchedulerCommand::JobFinished(outcome) => self.on_finished(outcome).await,
+        }
+    }
+
+    fn start(&mut self, req: CompileRequest, attempt: u8) {
+        let runner = self.runner.clone();
+        let cancel = CancellationToken::new();
+        let token = cancel.clone();
+        let req_for_task = req.clone();
+        let handle = tokio::spawn(async move { runner.compile(req_for_task, token).await });
+        self.running = Some(RunningJob {
+            request: req,
+            attempt,
+            handle,
+        });
+        self.cancel = Some(cancel);
+        self.emitter.status(CompileStatusDto {
+            phase: CompilePhase::Running,
+            kind: None,
+        });
+    }
+
+    async fn on_finished(&mut self, outcome: CompileOutcome) {
+        let Some(running) = self.running.take() else {
+            return;
+        };
+        self.cancel = None;
+
+        // 内容与 IO 错误：先广播错误列表（前端在收到 Running 时清空）
+        match &outcome {
+            CompileOutcome::ContentError { errors } => self.emitter.errors(errors.clone()),
+            CompileOutcome::IoError { message } => self.emitter.errors(vec![ErrorEntry {
+                message: message.clone(),
+                file: None,
+                line: None,
+                kind: ErrorKind::Io,
+            }]),
+            _ => {}
+        }
+        // 成功：广播 PDF 就绪
+        if let CompileOutcome::Success { pdf_path } = &outcome {
+            self.emitter.pdf(pdf_path.clone());
+        }
+
+        let has_pending = !self.queue.is_empty();
+        match decide(running.attempt, &outcome, has_pending) {
+            Decide::StartPending => {
+                let req = self.queue.take().expect("has_pending 与队列一致");
+                self.start(req, 0);
+            }
+            Decide::Retry => {
+                self.start(running.request.clone(), running.attempt + 1);
+            }
+            Decide::FinishOk => {
+                self.emitter.status(CompileStatusDto {
+                    phase: CompilePhase::Success,
+                    kind: None,
+                });
+            }
+            Decide::Fail(kind) => {
+                self.emitter.status(CompileStatusDto {
+                    phase: CompilePhase::Failed,
+                    kind: Some(kind),
+                });
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{event_log_emitter, wait_until, EventLog, FakeRunner};
+    use crate::types::{Engine, ErrorKind, FailureKind};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    fn req(name: &str) -> CompileRequest {
+        CompileRequest {
+            root_file: PathBuf::from(name),
+            project_root: PathBuf::from("proj"),
+            engine: Engine::XeLaTeX,
+            timeout: Duration::from_secs(120),
+        }
+    }
+
+    fn error_entry(msg: &str) -> ErrorEntry {
+        ErrorEntry {
+            message: msg.into(),
+            file: None,
+            line: None,
+            kind: ErrorKind::ContentError,
+        }
+    }
+
+    /// 启动调度器 + 收集器 + 假 runner。
+    fn setup(runner: FakeRunner) -> (SchedulerHandle, Arc<EventLog>, Arc<FakeRunner>) {
+        let runner = Arc::new(runner);
+        let log = Arc::new(EventLog::new());
+        let handle = Scheduler::spawn(runner.clone(), event_log_emitter(log.clone()));
+        (handle, log, runner)
+    }
+
+    fn running_dto() -> CompileStatusDto {
+        CompileStatusDto {
+            phase: CompilePhase::Running,
+            kind: None,
+        }
+    }
+
+    fn success_dto() -> CompileStatusDto {
+        CompileStatusDto {
+            phase: CompilePhase::Success,
+            kind: None,
+        }
+    }
+
+    fn failed_dto(kind: FailureKind) -> CompileStatusDto {
+        CompileStatusDto {
+            phase: CompilePhase::Failed,
+            kind: Some(kind),
+        }
+    }
+
+    // ---- 基础路径 ----
+
+    #[tokio::test]
+    async fn single_compile_success() {
+        let (h, log, _) = setup(FakeRunner::with_results(vec![CompileOutcome::Success {
+            pdf_path: PathBuf::from("proj/main.pdf"),
+        }]));
+        h.compile(req("main.tex"));
+        wait_until(|| log.statuses().len() >= 2).await;
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), success_dto()]
+        );
+        assert_eq!(log.pdfs(), vec![PathBuf::from("proj/main.pdf")]);
+    }
+
+    // ---- 合并语义 ----
+
+    #[tokio::test]
+    async fn merge_while_running_keeps_latest_only() {
+        let (h, log, runner) = setup(FakeRunner::with_hold());
+        h.compile(req("a.tex"));
+        wait_until(|| runner.calls().len() == 1).await;
+
+        // 运行中连来两个请求：合并为最新一个
+        h.compile(req("b.tex"));
+        h.compile(req("c.tex"));
+        wait_until(|| {
+            log.statuses().contains(&CompileStatusDto {
+                phase: CompilePhase::Queued,
+                kind: None,
+            })
+        })
+        .await;
+        assert_eq!(
+            log.statuses()
+                .iter()
+                .filter(|s| s.phase == CompilePhase::Queued)
+                .count(),
+            1,
+            "合并语义：只发一次 Queued"
+        );
+
+        // 放行 a：完成 → 启动合并后的 c（c 又挂起）
+        runner.release();
+        wait_until(|| runner.calls().len() == 2).await;
+        assert_eq!(runner.calls()[1].root_file, PathBuf::from("c.tex"));
+        // 放行 c：完成
+        runner.release();
+        wait_until(|| log.statuses().len() >= 4).await;
+
+        assert_eq!(
+            log.statuses(),
+            vec![
+                running_dto(),
+                CompileStatusDto {
+                    phase: CompilePhase::Queued,
+                    kind: None,
+                },
+                running_dto(),
+                success_dto(),
+            ]
+        );
+    }
+
+    // ---- 超时重试 ----
+
+    #[tokio::test]
+    async fn timeout_retries_once_then_succeeds() {
+        let (h, log, runner) = setup(FakeRunner::with_results(vec![
+            CompileOutcome::Timeout,
+            CompileOutcome::Success {
+                pdf_path: PathBuf::from("proj/main.pdf"),
+            },
+        ]));
+        h.compile(req("main.tex"));
+        wait_until(|| log.statuses().len() >= 3).await;
+        // 重试：不重发 Queued，直接 Running
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), running_dto(), success_dto()]
+        );
+        // 同一请求执行了两次
+        assert_eq!(runner.calls().len(), 2);
+        assert_eq!(runner.calls()[0], runner.calls()[1]);
+    }
+
+    #[tokio::test]
+    async fn timeout_twice_fails_with_timeout() {
+        let (h, log, _) = setup(FakeRunner::with_results(vec![
+            CompileOutcome::Timeout,
+            CompileOutcome::Timeout,
+        ]));
+        h.compile(req("main.tex"));
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::Timeout))).await;
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), running_dto(), failed_dto(FailureKind::Timeout)]
+        );
+    }
+
+    // ---- 内容错误 ----
+
+    #[tokio::test]
+    async fn content_error_no_pending_fails_and_emits_errors() {
+        let (h, log, _) = setup(FakeRunner::with_results(vec![CompileOutcome::ContentError {
+            errors: vec![error_entry("bad syntax")],
+        }]));
+        h.compile(req("main.tex"));
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::ContentError))).await;
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), failed_dto(FailureKind::ContentError)]
+        );
+        assert_eq!(log.errors(), vec![vec![error_entry("bad syntax")]]);
+    }
+
+    #[tokio::test]
+    async fn content_error_with_pending_skips_error_state_and_starts_pending() {
+        let (h, log, runner) = setup(FakeRunner::with_hold_and_results(vec![
+            CompileOutcome::ContentError {
+                errors: vec![error_entry("bad syntax")],
+            },
+            CompileOutcome::Success {
+                pdf_path: PathBuf::from("proj/main.pdf"),
+            },
+        ]));
+        h.compile(req("a.tex"));
+        wait_until(|| runner.calls().len() == 1).await;
+        h.compile(req("b.tex"));
+
+        // 放行 a：返回内容错误 → 错误已广播，但决策是直接开跑 b（不展示 Failed）
+        runner.release();
+        wait_until(|| runner.calls().len() == 2).await;
+        wait_until(|| log.errors().len() == 1).await;
+        assert_eq!(log.errors(), vec![vec![error_entry("bad syntax")]]);
+        // 放行 b：成功
+        runner.release();
+        wait_until(|| log.statuses().len() >= 4).await;
+        assert_eq!(
+            log.statuses(),
+            vec![
+                running_dto(),
+                CompileStatusDto {
+                    phase: CompilePhase::Queued,
+                    kind: None,
+                },
+                running_dto(),
+                success_dto(),
+            ]
+        );
+    }
+
+    // ---- 手动终止 ----
+
+    #[tokio::test]
+    async fn abort_during_running_fails_aborted() {
+        let (h, log, runner) = setup(FakeRunner::with_hold());
+        h.compile(req("main.tex"));
+        wait_until(|| runner.calls().len() == 1).await;
+        h.abort();
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::Aborted))).await;
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), failed_dto(FailureKind::Aborted)]
+        );
+        assert!(log.pdfs().is_empty());
+    }
+
+    #[tokio::test]
+    async fn abort_clears_pending_and_later_request_runs_fresh() {
+        let (h, log, runner) = setup(FakeRunner::with_hold());
+        h.compile(req("a.tex"));
+        wait_until(|| runner.calls().len() == 1).await;
+        h.compile(req("b.tex")); // 排队
+        h.abort(); // 清空队列 + 取消运行中
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::Aborted))).await;
+
+        // b 已被清掉：新请求 c 直接开跑
+        h.compile(req("c.tex"));
+        runner.release();
+        wait_until(|| runner.calls().len() == 2).await;
+        assert_eq!(runner.calls()[1].root_file, PathBuf::from("c.tex"));
+    }
+
+    // ---- IO 错误 ----
+
+    #[tokio::test]
+    async fn io_error_fails_and_emits_io_entry() {
+        let (h, log, _) = setup(FakeRunner::with_results(vec![CompileOutcome::IoError {
+            message: "latexmk 无法启动".into(),
+        }]));
+        h.compile(req("main.tex"));
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::ContentError))).await;
+        let errors = log.errors();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0][0].kind, ErrorKind::Io);
+        assert!(errors[0][0].message.contains("latexmk"));
+    }
+}

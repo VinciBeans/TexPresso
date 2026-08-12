@@ -5,9 +5,12 @@
 
 pub mod log_parser;
 pub mod project;
+pub mod scheduler;
 pub mod settings;
 pub mod synctex;
 pub mod types;
 
+#[cfg(test)]
+mod integration_tests;
 #[cfg(test)]
 mod testutil;
