@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 /// 内存文件系统：目录注册表 + 文件内容表。
 #[derive(Default)]
