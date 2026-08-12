@@ -1,0 +1,175 @@
+//! 组合层翻译（modules.md §7 / 设计决策 D3）。
+//!
+//! 文件事件 → [`CompileRequest`] 的纯逻辑部分：scheduler 只认识请求，
+//! 不认识文件/项目/设置。src-tauri 的 watch 调用本函数后把请求发给调度器。
+//! 放在 core 里是为了可测（信息局部性：每次构造都取快照拷贝，不持有引用）。
+
+use crate::project::{is_ignored, ProjectState};
+use crate::settings::Settings;
+use crate::types::CompileRequest;
+use std::path::Path;
+use std::time::Duration;
+
+/// 翻译所需的上下文快照（由 src-tauri 组合层从状态中取）。
+#[derive(Clone, Copy)]
+pub struct ComposeContext<'a> {
+    pub project: &'a ProjectState,
+    pub settings: &'a Settings,
+}
+
+/// 文件变化 → 编译请求；不满足触发条件返回 None。
+///
+/// 触发条件（design.md：任何 .tex 文件变化都触发编译）：
+/// - 已确定根文件；
+/// - 变化路径在项目根内；
+/// - 未被忽略（排除 tmp/、隐藏项、非 .tex）。
+pub fn compile_request_for_change(ctx: ComposeContext<'_>, changed: &Path) -> Option<CompileRequest> {
+    let root_file = ctx.project.root_file.as_ref()?;
+    if !changed.starts_with(&ctx.project.root) {
+        return None;
+    }
+    if is_ignored(changed, &ctx.project.root) {
+        return None;
+    }
+    Some(CompileRequest {
+        root_file: root_file.clone(),
+        project_root: ctx.project.root.clone(),
+        engine: ctx.settings.compile.engine,
+        timeout: Duration::from_secs(ctx.settings.compile.timeout_secs),
+    })
+}
+
+/// 手动编译请求（compile_now 命令）：与文件变化同路径，只是不校验 changed。
+pub fn compile_request_manual(ctx: ComposeContext<'_>) -> Option<CompileRequest> {
+    let root_file = ctx.project.root_file.as_ref()?;
+    Some(CompileRequest {
+        root_file: root_file.clone(),
+        project_root: ctx.project.root.clone(),
+        engine: ctx.settings.compile.engine,
+        timeout: Duration::from_secs(ctx.settings.compile.timeout_secs),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::ProjectState;
+    use crate::settings::{CompileSettings, SCHEMA_VERSION};
+    use crate::types::{CompileMode, Engine};
+    use std::path::PathBuf;
+
+    fn ctx<'a>(project: &'a ProjectState, settings: &'a Settings) -> ComposeContext<'a> {
+        ComposeContext { project, settings }
+    }
+
+    fn settings() -> Settings {
+        Settings {
+            schema_version: SCHEMA_VERSION,
+            compile: CompileSettings {
+                mode: CompileMode::Continuous,
+                debounce_ms: 500,
+                timeout_secs: 120,
+                engine: Engine::XeLaTeX,
+            },
+            root_file: None,
+        }
+    }
+
+    #[test]
+    fn no_root_file_returns_none() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: None,
+        };
+        assert_eq!(
+            compile_request_for_change(ctx(&project, &settings()), Path::new("proj/main.tex")),
+            None
+        );
+    }
+
+    #[test]
+    fn non_tex_change_returns_none() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        assert_eq!(
+            compile_request_for_change(ctx(&project, &settings()), Path::new("proj/notes.md")),
+            None
+        );
+    }
+
+    #[test]
+    fn tmp_change_returns_none() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        assert_eq!(
+            compile_request_for_change(ctx(&project, &settings()), Path::new("proj/tmp/main.tex")),
+            None
+        );
+    }
+
+    #[test]
+    fn outside_project_returns_none() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        assert_eq!(
+            compile_request_for_change(ctx(&project, &settings()), Path::new("other/evil.tex")),
+            None
+        );
+    }
+
+    #[test]
+    fn tex_change_builds_request_from_snapshot() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        let mut s = settings();
+        s.compile.engine = Engine::LuaLaTeX;
+        s.compile.timeout_secs = 60;
+
+        let req = compile_request_for_change(ctx(&project, &s), Path::new("proj/chapters/a.tex"))
+            .expect("应触发");
+        assert_eq!(req.root_file, PathBuf::from("proj/main.tex"));
+        assert_eq!(req.project_root, PathBuf::from("proj"));
+        assert_eq!(req.engine, Engine::LuaLaTeX);
+        assert_eq!(req.timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn request_is_snapshot_not_reference() {
+        // 请求携带构造时值：之后设置变化不影响已构造请求（modules.md §2.4）
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        let mut s = settings();
+        let req = compile_request_for_change(ctx(&project, &s), Path::new("proj/a.tex")).unwrap();
+        s.compile.timeout_secs = 5; // 构造后改设置
+        assert_eq!(req.timeout, Duration::from_secs(120)); // 请求不受影响
+    }
+
+    #[test]
+    fn manual_request_ignores_changed_path() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: Some(PathBuf::from("proj/main.tex")),
+        };
+        let req = compile_request_manual(ctx(&project, &settings())).unwrap();
+        assert_eq!(req.root_file, PathBuf::from("proj/main.tex"));
+    }
+
+    #[test]
+    fn manual_request_without_root_returns_none() {
+        let project = ProjectState {
+            root: PathBuf::from("proj"),
+            root_file: None,
+        };
+        assert_eq!(compile_request_manual(ctx(&project, &settings())), None);
+    }
+}

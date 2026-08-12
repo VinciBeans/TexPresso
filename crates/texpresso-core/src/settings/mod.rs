@@ -9,5 +9,5 @@ pub mod model;
 pub mod validate;
 
 pub use merge::{apply_patch, merge};
-pub use model::{CompileOverrides, CompileSettings, ProjectOverrides, Settings, SettingsPatch};
+pub use model::{CompileOverrides, CompileSettings, ProjectOverrides, Settings, SettingsPatch, SCHEMA_VERSION};
 pub use validate::{validate, validate_overrides};
