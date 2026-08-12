@@ -64,6 +64,17 @@ export const useEditorStore = defineStore("editor", () => {
     }
   }
 
+  /** 乐观记录自保存（修竞态：后端写盘 → notify → files-changed 可能先于 saveAll 返回到达，
+   *  此时若 lastSaved 未记录会误判外部修改）。失败时回滚。 */
+  function markSaving(paths: string[]) {
+    const now = Date.now();
+    for (const p of paths) lastSaved.value.set(p, now);
+  }
+
+  function rollbackSaving(paths: string[]) {
+    for (const p of paths) lastSaved.value.delete(p);
+  }
+
   /** files-changed 处理（modules.md §5.5 算法）：
    * 1. 自己刚保存的（<2s）→ 忽略；
    * 2. 打开且不脏 → 静默重载；
@@ -109,7 +120,8 @@ export const useEditorStore = defineStore("editor", () => {
 
   return {
     tabs, activePath, dirty, buffers, lastSaved, externalConflict, activeTab,
-    openFile, closeTab, markDirty, markSaved, onFilesChanged, acceptExternal,
+    openFile, closeTab, markDirty, markSaved, markSaving, rollbackSaving,
+    onFilesChanged, acceptExternal,
     pendingReveal, consumeReveal,
   };
 });

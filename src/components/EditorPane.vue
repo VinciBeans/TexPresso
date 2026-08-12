@@ -41,6 +41,7 @@ onMounted(() => {
     const model = monacoEditor!.getModel();
     if (!model) return;
     const path = model.uri.path;
+    console.log("[EditorPane] change →", path, "内容前30字:", JSON.stringify(model.getValue().slice(0, 30)));
     editor.markDirty(path, model.getValue());
     emit("change", path);
   });
@@ -68,6 +69,7 @@ watch(
       model = monaco.editor.createModel(editor.buffers.get(path) ?? "", "latex", uri);
     }
     monacoEditor.setModel(model);
+    console.log("[EditorPane] 切换 model →", path, "| model.uri.path =", model.uri.path, "| buffers 有内容:", editor.buffers.has(path));
     reportCursor();
   },
   { immediate: true }
