@@ -303,6 +303,20 @@ watch(
     box.style.top = `${pt[1] - 10}px`;
     box.style.width = "50px";
     box.style.height = "20px";
+    // 滚动阅读区，使高亮点尽量居中（Ctrl+点击源码后跳转可见）
+    const pageEl = pageEls[h.page];
+    const c = container.value;
+    if (pageEl && c) {
+      const pageRect = pageEl.getBoundingClientRect();
+      const cRect = c.getBoundingClientRect();
+      const targetY = pageRect.top + pt[1] - 10 + 10; // 高亮中心（页面坐标系）
+      const targetX = pageRect.left + pt[0]; // 高亮中心（页面坐标系）
+      c.scrollTo({
+        top: c.scrollTop + (targetY - cRect.top) - cRect.height / 2,
+        left: c.scrollLeft + (targetX - cRect.left) - cRect.width / 2,
+        behavior: "smooth",
+      });
+    }
   }
 );
 
