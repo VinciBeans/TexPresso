@@ -31,10 +31,13 @@ export const useProjectStore = defineStore("project", () => {
     timer = setTimeout(() => refreshTree().catch(() => {}), 300);
   }
 
-  /** 相对路径（如 ./main.tex、chapters/a.tex）解析为项目内绝对路径。 */
+  /** 相对路径（如 ./main.tex、chapters/a.tex）解析为项目内绝对路径。
+   *  统一输出正斜杠（存储键/后端请求一致）；Windows 接受盘符开头（\\?\ 防御直通）；WSL：/ 开头。 */
   function resolvePath(p: string): string {
-    if (p.startsWith("/") || /^[A-Za-z]:/.test(p)) return p;
-    return root.value + "/" + p.replace(/^\.\//, "");
+    if (p.startsWith("\\\\?\\")) return p; // 防御：verbatim 直通（后端应已剥离）
+    const n = p.replace(/\\/g, "/");
+    if (n.startsWith("/") || /^[A-Za-z]:/.test(n)) return n;
+    return root.value.replace(/\\/g, "/") + "/" + n.replace(/^\.\//, "");
   }
 
   return { project, tree, treeVersion, root, openProject, refreshTree, refreshTreeDebounced, resolvePath };

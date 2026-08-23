@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeXPresso — 三强精修</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+    background: #FAFAFA; color: #1A1A1A;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  .mono { font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 64px 24px; }
+  header { text-align: center; margin-bottom: 56px; max-width: 720px; }
+  header h1 { font-size: 38px; font-weight: 200; letter-spacing: 0.04em; margin-bottom: 14px; }
+  header h1 b { font-weight: 800; color: #5D5FEF; }
+  header p { font-size: 12px; letter-spacing: 0.26em; text-transform: uppercase; opacity: 0.45; }
+
+  .trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 48px; max-width: 1100px; width: 100%; }
+  .fin { display: flex; flex-direction: column; gap: 18px; }
+  .fin h2 { font-size: 19px; font-weight: 600; letter-spacing: 0.03em; }
+  .fin h3 { font-size: 11px; opacity: 0.5; letter-spacing: 0.22em; }
+  .fin ul { list-style: none; font-size: 13px; opacity: 0.72; line-height: 2; font-weight: 300; }
+
+  .board { display: grid; grid-template-rows: auto auto; gap: 12px; }
+  .swatch { border-radius: 18px; display: flex; align-items: center; justify-content: center; padding: 40px 0; transition: transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+  .swatch:hover { transform: translateY(-3px); }
+  .swatch.paper { background: #F4F2FB; border: 1px solid #E9E4F8; }
+  .swatch.ink { background: #2B2438; }
+  .swatch img { width: 128px; height: 128px; }
+
+  .row16 { display: flex; align-items: center; gap: 14px; }
+  .row16 img { width: 32px; height: 32px; }
+  .row16 .tag { font-size: 11px; opacity: 0.5; }
+
+  footer { margin-top: 72px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.4; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>TeX<b>Presso</b> · 三强精修</h1>
+    <p>Phase 2 Refined · 请在下方选出最终方向</p>
+  </header>
+
+  <div class="trio">
+    <div class="fin">
+      <h2>V3 — Steam Waves</h2>
+      <h3 class="mono">LINE · 弧 + 双 S + 蒸汽滴</h3>
+      <div class="board">
+        <div class="swatch paper"><img src="logo-variants/v3-steam-waves.svg" alt="V3 paper"></div>
+        <div class="swatch ink"><img src="logo-variants/v3-steam-waves.svg" alt="V3 ink"></div>
+      </div>
+      <div class="row16"><img src="logo-variants/v3-steam-waves.svg" alt="V3 32px"><span class="tag mono">32px 实尺</span></div>
+      <ul>
+        <li>· 一句话：最"科学符号"的一个，编辑部气质</li>
+        <li>· 精修：左柱冒得更高，右柱珊瑚色，顶部一粒脱离的蒸汽滴制造不对称</li>
+        <li>· 16px：线条会变细弱，favicon 用瓦片版补足</li>
+      </ul>
+    </div>
+
+    <div class="fin">
+      <h2>V4 — Hot Steam Cup <span class="picked">★ 已选定</span></h2>
+      <h3 class="mono">DOT + GEOMETRY · 杯 + 蒸汽流</h3>
+      <div class="board">
+        <div class="swatch paper"><img src="logo-variants/v4-hot-steam-cup.svg" alt="V4 paper"></div>
+        <div class="swatch ink"><img src="logo-variants/v4-hot-steam-cup.svg" alt="V4 ink"></div>
+      </div>
+      <div class="row16"><img src="logo-variants/v4-hot-steam-cup.svg" alt="V4 32px"><span class="tag mono">32px 实尺</span></div>
+      <ul>
+        <li>· 一句话：最"咖啡"的一个，年轻可爱、动势明显</li>
+        <li>· 精修：加杯口翻边、杯碟加宽，蒸汽改四粒渐细上升流</li>
+        <li>· 16px：杯身实心，识别度三强中最好</li>
+      </ul>
+    </div>
+
+    <div class="fin">
+      <h2>V8 — Line T</h2>
+      <h3 class="mono">LINE FILL · 横线织 T</h3>
+      <div class="board">
+        <div class="swatch paper"><img src="logo-variants/v8-line-t.svg" alt="V8 paper"></div>
+        <div class="swatch ink"><img src="logo-variants/v8-line-t.svg" alt="V8 ink"></div>
+      </div>
+      <div class="row16"><img src="logo-variants/v8-line-t.svg" alt="V8 32px"><span class="tag mono">32px 实尺</span></div>
+      <ul>
+        <li>· 一句话：最"开发者工具"的一个，技术感含蓄</li>
+        <li>· 精修：线距收紧、竖干加长，顶线珊瑚色作"热源"</li>
+        <li>· 16px：读作实心 T，清晰</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>TeXPresso · Finalists · Generated with Logo Generator</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="TeXPresso 单色标志">
+  <title>TeXPresso（单色）</title>
+  <!-- 杯口 -->
+  <rect x="29" y="46" width="42" height="8" rx="4" fill="currentColor"/>
+  <!-- 杯身 -->
+  <path d="M 31 54 L 39 68 Q 40 74 46 74 L 54 74 Q 60 74 61 68 L 69 54 Z" fill="currentColor"/>
+  <!-- 杯碟 -->
+  <rect x="22" y="80" width="56" height="8" rx="4" fill="currentColor"/>
+  <!-- 蒸汽四粒 -->
+  <g fill="currentColor">
+    <circle cx="40" cy="32" r="3.4"/>
+    <circle cx="48" cy="27" r="2.8"/>
+    <circle cx="55" cy="23" r="2.3"/>
+    <circle cx="61" cy="20" r="1.8"/>
+  </g>
+</svg>

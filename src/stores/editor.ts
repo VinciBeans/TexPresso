@@ -28,7 +28,7 @@ export const useEditorStore = defineStore("editor", () => {
     const path = project.resolvePath(rawPath);
     if (!tabs.value.some((t) => t.path === path)) {
       const content = await ipc.readFile(path);
-      tabs.value.push({ path, name: path.split("/").pop() ?? path });
+      tabs.value.push({ path, name: path.split(/[/\\]/).pop() ?? path });
       buffers.value.set(path, content);
     }
     activePath.value = path;

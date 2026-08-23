@@ -17,8 +17,22 @@ const { forward } = useSyncTex();
 const host = ref<HTMLElement | null>(null);
 let monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null;
 
+/**
+ * model uri.toString() → 存储路径（反查表）。
+ * Monaco 的 `uri.path` 对 `file:///E:/...` 会带前导 `/`；对 Windows 反斜杠路径
+ * 会把整段解析进 authority（uri.path 变空）。因此所有“model → 存储路径”的映射
+ * 一律经此表，绝不直接读 uri.path 作为存储键。
+ */
+const modelPaths = new Map<string, string>();
+
 function uriOf(path: string) {
-  return monaco.Uri.parse("file://" + path);
+  // 统一正斜杠：file:///E:/...（Windows 盘符）或 file:///home/...（UNIX）
+  const p = path.replace(/\\/g, "/");
+  return monaco.Uri.parse("file://" + (p.startsWith("/") ? p : "/" + p));
+}
+
+function storePathOf(model: monaco.editor.ITextModel | null): string | undefined {
+  return model ? modelPaths.get(model.uri.toString()) : undefined;
 }
 
 function reportCursor() {
@@ -28,7 +42,6 @@ function reportCursor() {
 
 onMounted(() => {
   monacoEditor = monaco.editor.create(host.value!, {
-    theme: "vs-dark",
     automaticLayout: true,
     fontSize: 14,
     minimap: { enabled: false },
@@ -39,8 +52,8 @@ onMounted(() => {
   // 内容变更 → 脏标记 + 缓冲（自动保存的数据源）
   monacoEditor.onDidChangeModelContent(() => {
     const model = monacoEditor!.getModel();
-    if (!model) return;
-    const path = model.uri.path;
+    const path = storePathOf(model);
+    if (!path) return;
     editor.markDirty(path, model.getValue());
     emit("change", path);
   });
@@ -52,7 +65,8 @@ onMounted(() => {
     if (e.event.ctrlKey && e.target.position) {
       const pos = e.target.position;
       const model = monacoEditor!.getModel();
-      if (model) forward(model.uri.path, pos.lineNumber, pos.column);
+      const path = storePathOf(model);
+      if (model && path) forward(path, pos.lineNumber, pos.column);
     }
   });
 });
@@ -67,10 +81,34 @@ watch(
     if (!model) {
       model = monaco.editor.createModel(editor.buffers.get(path) ?? "", "latex", uri);
     }
+    modelPaths.set(model.uri.toString(), path);
     monacoEditor.setModel(model);
     reportCursor();
-  },
-  { immediate: true }
+  }
+);
+
+// 最后一个标签被关闭（activePath 变 null）→ 清空编辑器：否则旧 model 残留，
+// 仍可编辑/自动保存/触发编译（BUG 修复）。
+watch(
+  () => editor.activePath,
+  (path) => {
+    if (path || !monacoEditor) return;
+    monacoEditor.setModel(null);
+  }
+);
+
+// 关闭标签 → 释放对应 model（防残留编辑；重开时按 buffer/磁盘内容重建，不读旧 model）
+watch(
+  () => editor.tabs.map((t) => t.path),
+  (paths) => {
+    for (const m of monaco.editor.getModels()) {
+      const storePath = modelPaths.get(m.uri.toString());
+      if (storePath !== undefined && !paths.includes(storePath)) {
+        modelPaths.delete(m.uri.toString());
+        m.dispose();
+      }
+    }
+  }
 );
 
 // 外部重载（modules.md §5.5）：buffer 变化 → model 同步；值相同跳过（防循环）

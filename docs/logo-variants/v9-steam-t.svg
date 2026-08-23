@@ -1,0 +1,14 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Steam T 融合版">
+  <title>Steam T</title>
+  <!-- 蒸汽织成的 T：横杠 = 蒸汽漂散，竖干 = 上升流 -->
+  <g fill="none" stroke="#FF7A6E" stroke-width="2.6" stroke-linecap="round">
+    <path d="M 32 10 Q 40 6, 50 9 Q 60 12, 68 8"/>
+    <path d="M 50 9 C 45 15, 55 21, 50 27 C 45 33, 55 39, 50 42"/>
+  </g>
+  <!-- 杯口（翻边） -->
+  <rect x="29" y="46" width="42" height="8" rx="4" fill="#5D5FEF"/>
+  <!-- 杯身 -->
+  <path d="M 31 54 L 39 68 Q 40 74 46 74 L 54 74 Q 60 74 61 68 L 69 54 Z" fill="#5D5FEF"/>
+  <!-- 杯碟 -->
+  <rect x="22" y="80" width="56" height="8" rx="4" fill="#5D5FEF"/>
+</svg>

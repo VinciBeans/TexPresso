@@ -1,0 +1,21 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="V8 Line T">
+  <title>Line T</title>
+  <defs>
+    <clipPath id="c50"><circle cx="50" cy="50" r="34"/></clipPath>
+  </defs>
+  <!-- 圆内横线长短排序，轮廓拼出字母 T；最顶一线为“热源” -->
+  <g clip-path="url(#c50)" stroke="#5D5FEF" stroke-width="4" stroke-linecap="round">
+    <line x1="16" y1="24" x2="84" y2="24" stroke="#FF7A6E"/>
+    <line x1="16" y1="28.5" x2="84" y2="28.5"/>
+    <line x1="16" y1="33" x2="84" y2="33"/>
+    <line x1="16" y1="37.5" x2="84" y2="37.5"/>
+    <line x1="42" y1="42" x2="58" y2="42"/>
+    <line x1="42" y1="46.5" x2="58" y2="46.5"/>
+    <line x1="42" y1="51" x2="58" y2="51"/>
+    <line x1="42" y1="55.5" x2="58" y2="55.5"/>
+    <line x1="42" y1="60" x2="58" y2="60"/>
+    <line x1="42" y1="64.5" x2="58" y2="64.5"/>
+    <line x1="42" y1="69" x2="58" y2="69"/>
+    <line x1="42" y1="73.5" x2="58" y2="73.5"/>
+  </g>
+</svg>

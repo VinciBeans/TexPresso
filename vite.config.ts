@@ -26,7 +26,12 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: [
+        "**/src-tauri/**",
+        // 临时目录（如 logo 预览工具写入的 .logo.svg.<pid>.<uuid>.tmpdir/）：
+        // 文件可能被工具锁定（EBUSY），chokidar 的未处理 error 会拖垮整个 vite。
+        /\.tmpdir[\\/]/,
+      ],
     },
   },
 }));

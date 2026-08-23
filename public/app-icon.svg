@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="TeXPresso 应用图标">
+  <title>TeXPresso</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6A5CFF"/>
+      <stop offset="0.55" stop-color="#5D5FEF"/>
+      <stop offset="1" stop-color="#4E9BFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="233" fill="url(#tile)"/>
+  <!-- 杯口 -->
+  <rect x="302" y="441" width="420" height="80" rx="40" fill="#F4F2FB"/>
+  <!-- 杯身 -->
+  <path d="M 322 521 L 402 661 Q 412 721 472 721 L 552 721 Q 612 721 622 661 L 702 521 Z" fill="#F4F2FB"/>
+  <!-- 杯碟 -->
+  <rect x="232" y="781" width="560" height="80" rx="40" fill="#F4F2FB"/>
+  <!-- 蒸汽四粒 -->
+  <g fill="#FF7A6E">
+    <circle cx="412" cy="301" r="34"/>
+    <circle cx="492" cy="251" r="28"/>
+    <circle cx="562" cy="201" r="23"/>
+    <circle cx="622" cy="171" r="18"/>
+  </g>
+</svg>

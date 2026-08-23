@@ -4,6 +4,7 @@
 //! （自建命令没有 Tauri 权限模型兜底，必须自守）。
 
 use crate::events::SettingsChangedEvent;
+use crate::fs_impl::strip_verbatim;
 use tauri_specta::Event;
 use crate::storage::SettingsStorage;
 use serde::Serialize;
@@ -102,7 +103,7 @@ pub async fn open_project(folder: String, state: State<'_, AppState>) -> Result<
 
     // 根文件：手动覆盖优先；否则探测（modules.md §5.4）
     let root_file = match settings.root_file.clone() {
-        Some(override_path) => Some(canonical.join(override_path)),
+        Some(override_path) => Some(strip_verbatim(&canonical.join(override_path))),
         None => {
             let files = collect_tex_files(state.fs.as_ref(), &canonical)
                 .await
@@ -112,19 +113,20 @@ pub async fn open_project(folder: String, state: State<'_, AppState>) -> Result<
                 std::fs::read_to_string(p).ok()
             }));
             match resolution {
-                RootResolution::Unique(p) => Some(p),
+                RootResolution::Unique(p) => Some(strip_verbatim(&p)),
                 RootResolution::Multiple(_) | RootResolution::None => None, // 前端弹窗/手动指定
             }
         }
     };
 
+    let root = strip_verbatim(&canonical);
     let project = ProjectState {
-        root: canonical.clone(),
+        root: root.clone(),
         root_file,
     };
     *state.project.write().await = Some(project.clone());
-    state.watch.set_project_root(Some(canonical.clone()));
-    info!("打开项目：{}", canonical.display());
+    state.watch.set_project_root(Some(root.clone()));
+    info!("打开项目：{}", root.display());
 
     Ok(ProjectInfo {
         root: project.root,

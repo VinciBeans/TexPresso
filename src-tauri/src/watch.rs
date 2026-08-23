@@ -5,6 +5,7 @@
 //! - 旁路广播 files-changed（前端文件树防抖重建）。
 
 use crate::events::{FilesChangedEvent, SettingsChangedEvent};
+use crate::fs_impl::strip_verbatim;
 use crate::storage::SettingsStorage;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -129,7 +130,10 @@ fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Opt
         return;
     }
     let paths = normalize_event_paths(event);
-    for path in paths {
+    for raw in paths {
+        // Windows：notify 事件路径可能带 \\?\ 前缀（取决于 watch 根形式），统一剥离，
+        // 与 state.project.root（已剥离）保持一致，否则 starts_with 校验永远失败。
+        let path = strip_verbatim(&raw);
         // 1. 设置文件（全局或项目）→ 热更新
         if is_settings_path(&path, &state, project_root) {
             handle_settings_change(&path, state.clone());

@@ -1,0 +1,8 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="V1 Crema T">
+  <title>Crema T</title>
+  <!-- 俯视的浓缩咖啡：实心圆 = crema 圆面 -->
+  <circle cx="50" cy="51" r="38" fill="#5D5FEF"/>
+  <!-- 压在 crema 上的品牌首字母 T -->
+  <rect x="27" y="36" width="46" height="11" rx="5.5" fill="#FF7A6E"/>
+  <rect x="44.5" y="47" width="11" height="22" rx="5.5" fill="#FF7A6E"/>
+</svg>

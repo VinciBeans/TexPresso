@@ -16,11 +16,12 @@ const expanded = ref(false);
 
 const isDir = computed(() => props.node.entry.is_dir);
 const isActive = computed(() => editor.activePath === props.node.entry.path);
+const isTex = computed(() => props.node.entry.name.endsWith(".tex"));
 
 function click() {
   if (isDir.value) {
     expanded.value = !expanded.value;
-  } else if (props.node.entry.path.endsWith(".tex")) {
+  } else if (isTex.value) {
     editor.openFile(props.node.entry.path);
   }
 }
@@ -28,8 +29,9 @@ function click() {
 
 <template>
   <div class="node">
-    <div class="row" :class="{ active: isActive }" @click="click">
+    <div class="row" :class="{ active: isActive, dir: isDir }" @click="click">
       <span class="twist">{{ isDir ? (expanded ? "▾" : "▸") : "" }}</span>
+      <span class="icon" :class="{ 'icon-dir': isDir, 'icon-tex': isTex }">{{ isDir ? (expanded ? "📂" : "📁") : "📄" }}</span>
       <span class="name">{{ node.entry.name }}</span>
     </div>
     <div v-if="isDir && expanded" class="children">
@@ -44,11 +46,40 @@ export default { name: "FileTreeItem" };
 </script>
 
 <style scoped>
-.node { }
-.row { display: flex; align-items: center; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
-.row:hover { background: #2a2d2e; }
-.row.active { background: #37373d; }
-.twist { width: 14px; color: #888; }
+.node { position: relative; }
+.children { position: relative; }
+/* 层级缩进引导线 */
+.children::before {
+  content: " ";
+  position: absolute; left: 12px; top: 0; bottom: 0;
+  width: 1.5px;
+  background: var(--line-soft);
+}
+.row {
+  position: relative;
+  display: flex; align-items: center; gap: 5px;
+  height: 25px; margin: 1px 6px;
+  padding: 0 8px 0 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.row:hover { background: var(--card-2); color: var(--ink); }
+.row.active {
+  background: linear-gradient(90deg, #eeeafd 0%, rgba(93, 95, 239, 0.07) 100%);
+  color: var(--ink);
+}
+.row.active::before {
+  content: " ";
+  position: absolute; left: 0; top: 4px; bottom: 4px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--blueberry);
+}
+.twist { width: 12px; flex: 0 0 12px; font-size: 9px; color: var(--ink-faint); text-align: center; }
+.icon { flex: 0 0 auto; font-size: 12px; }
+.icon-tex { color: var(--blueberry); }
 .name { overflow: hidden; text-overflow: ellipsis; }
-.children { padding-left: 12px; }
+.children { padding-left: 13px; }
 </style>

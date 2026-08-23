@@ -8,7 +8,7 @@
 - 纯前端改动（Vite HMR）不触发
 - Rust 改动触发的进程重启不触发
 - 仅**进程冷启动**时偶发（不是每次）
-- 与 `vite.svg` 的 404 无关（public/ 中存在该文件，属重启瞬间的瞬态请求）
+- 与 `vite.svg` 的 404 无关（模板遗留文件，品牌化后已移除；当时属重启瞬间的瞬态请求）
 
 **已尝试无效**：`WEBKIT_DISABLE_DMABUF_RENDERER=1`、`LIBGL_ALWAYS_SOFTWARE=1`、`WEBKIT_DISABLE_COMPOSITING_MODE=1`。
 

@@ -45,7 +45,10 @@ function onPointerUp() {
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
-    />
+      @pointercancel="onPointerUp"
+    >
+      <span class="grip" />
+    </div>
     <div class="pane secondary"><slot name="secondary" /></div>
   </div>
 </template>
@@ -53,9 +56,32 @@ function onPointerUp() {
 <style scoped>
 .split-pane { display: flex; width: 100%; height: 100%; overflow: hidden; }
 .split-pane.horizontal { flex-direction: column; }
-.divider { flex: 0 0 4px; background: #2b2b2b; cursor: col-resize; }
+.divider {
+  position: relative;
+  flex: 0 0 6px;
+  background: var(--line-soft);
+  cursor: col-resize;
+  transition: background 0.15s;
+}
+.divider:hover,
+.split-pane.dragging .divider { background: var(--blueberry); }
 .divider.horizontal { cursor: row-resize; }
-.split-pane.dragging .divider { background: #3b7dd8; }
+.grip {
+  position: absolute; top: 50%; left: 50%;
+  width: 20px; height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at center, #c3bce0 0 1.5px, transparent 1.5px)
+    center / 8px 11px repeat-y;
+  opacity: 0.95;
+  pointer-events: none;
+}
+.divider:hover .grip,
+.split-pane.dragging .grip { background: radial-gradient(circle at center, #fff 0 1.5px, transparent 1.5px) center / 8px 11px repeat-y; }
+.divider.horizontal .grip { width: 30px; height: 20px; background: radial-gradient(circle at center, #c3bce0 0 1.5px, transparent 1.5px) center / 11px 8px repeat-x; }
+.divider.horizontal:hover .grip,
+.split-pane.dragging .divider.horizontal .grip { background: radial-gradient(circle at center, #fff 0 1.5px, transparent 1.5px) center / 11px 8px repeat-x; }
 .pane { min-width: 0; min-height: 0; overflow: hidden; }
 .primary { flex: 0 0 v-bind(primaryFlex); }
 .secondary { flex: 1 1 auto; }

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeXPresso — Logo 方案探索</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #FAFAFA; color: #1A1A1A;
+    overflow-x: hidden;
+  }
+  .mono { font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  html { scroll-behavior: smooth; }
+
+  .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 80px 24px 60px; }
+
+  header { text-align: center; margin-bottom: 72px; max-width: 760px; }
+  header h1 { font-size: 64px; font-weight: 200; letter-spacing: 0.06em; margin-bottom: 20px; }
+  header h1 b { font-weight: 800; color: #5D5FEF; }
+  header h1 i { font-style: normal; color: #FF7A6E; }
+  header p { font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; opacity: 0.4; margin-bottom: 28px; }
+  header .rule { width: 48px; height: 1px; background: #1A1A1A; opacity: 0.3; margin: 0 auto; }
+  header .note { margin-top: 24px; font-size: 13px; opacity: 0.55; line-height: 1.8; }
+
+  .grid { max-width: 1150px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 56px; }
+
+  .card { display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.7s cubic-bezier(0.16,1,0.3,1); }
+  .card:hover { transform: translateY(-4px); }
+  .canvas {
+    width: 256px; height: 256px; margin-bottom: 36px;
+    display: flex; align-items: center; justify-content: center;
+    background: #F4F2FB; border: 1px solid #E9E4F8; border-radius: 24px;
+    position: relative;
+  }
+  .canvas .logo { width: 128px; height: 128px; position: relative; z-index: 1; transition: transform 0.7s cubic-bezier(0.16,1,0.3,1); }
+  .card:hover .logo { transform: scale(1.05); }
+  .canvas .aura {
+    position: absolute; inset: 0; border-radius: 24px;
+    background: radial-gradient(circle, rgba(93,95,239,0.10) 0%, transparent 70%);
+    opacity: 0; transition: all 0.9s cubic-bezier(0.16,1,0.3,1); pointer-events: none;
+  }
+  .card:hover .aura { opacity: 1; }
+
+  .card h2 { font-size: 20px; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .card h3 { font-size: 11px; opacity: 0.5; letter-spacing: 0.24em; margin-bottom: 22px; }
+  .card p { font-size: 13.5px; line-height: 1.85; opacity: 0.72; font-weight: 300; text-align: left; width: 100%; }
+  .divider { width: 0; height: 1px; background: #1A1A1A; opacity: 0.2; transition: width 0.7s cubic-bezier(0.16,1,0.3,1); margin-top: 26px; }
+  .card:hover .divider { width: 100%; }
+
+  .scale-sec { margin-top: 96px; max-width: 1150px; width: 100%; }
+  .scale-sec h3 { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.45; margin-bottom: 24px; }
+  .scale-row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+  .scale-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .scale-item b { font-size: 11px; opacity: 0.5; }
+  .scale-mini { display: flex; align-items: center; gap: 10px; }
+  .scale-mini .cell { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #EFEAF9; border-radius: 8px; }
+  .scale-mini .cell.dark { background: #2B2438; border-color: #2B2438; }
+
+  footer { margin-top: 110px; text-align: center; }
+  footer p { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.4; line-height: 2.2; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card, .logo, .divider { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>TeX<b>Presso</b><i>.</i></h1>
+    <p>Logo Design Exploration · 8 个方向</p>
+    <div class="rule"></div>
+    <p class="note">
+      一句话品牌：TeX + espresso —— 一杯浓缩咖啡，正冒着 TeX 的蒸汽。<br/>
+      核心设计因素：实时编译（编辑即编译，即时如浓缩）。<br/>
+      色板沿用应用内 Candy Desk：蓝莓紫 #5D5FEF · 珊瑚橙 #FF7A6E · 墨色 #2B2438 · 纸面 #F4F2FB<br/>
+      <strong style="color:#5D5FEF">✓ 已选定：V4 — Hot Steam Cup</strong>
+    </p>
+  </header>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v1-crema-t.svg" alt="Crema T"></div>
+      <h2>Crema T</h2>
+      <h3 class="mono">PURE GEOMETRY · 实心圆 + T</h3>
+      <p>俯视的浓缩咖啡杯：实心圆面就是 crema 咖啡脂，品牌首字母 T 直接压在 crema 上。一个元素、两层含义——最少的形状、最稳的结构，16px 下依旧清晰。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v2-dot-cup.svg" alt="Dot Cup"></div>
+      <h2>Dot Cup</h2>
+      <h3 class="mono">DOT MATRIX · 圆点矩阵</h3>
+      <p>用圆点一格一格"冲"出一杯咖啡：杯口宽、杯身收窄、杯碟垫底，蒸汽两粒点。像素化的轻松感，像咖啡机的压力表盘——年轻、好玩、可动。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v3-steam-waves.svg" alt="Steam Waves"></div>
+      <h2>Steam Waves</h2>
+      <h3 class="mono">LINE SYSTEM · 弧线 + 双 S 曲线</h3>
+      <p>杯体只剩一条弧线，蒸汽是两道 S 曲线。右侧那道珊瑚色的冒得更高——刚出的那杯，还烫着。极简线条，编辑部气质，也是典型的"热饮"科学符号。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v4-hot-steam-cup.svg" alt="Hot Steam Cup"></div>
+      <h2>Hot Steam Cup</h2>
+      <h3 class="mono">DOTS + GEOMETRY · 实心杯 + 漂散点</h3>
+      <p>实心浮雕杯身配杯碟，蒸汽是三粒向右上漂散、渐渐细小的圆点——不对称构图带来动势。重量感集中在下方，蒸汽随身带走"即时感"。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v5-pulse-ring.svg" alt="Pulse Ring"></div>
+      <h2>Pulse Ring</h2>
+      <h3 class="mono">LINES + GEOMETRY · 环 + 脉冲线</h3>
+      <p>杯子俯视成一只环，环内是一条实时编译的脉冲线——编辑 → 编译 → 出 PDF，心跳般的响应。顶部两粒蒸汽提醒你：它仍然是热的。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v6-rising-nodes.svg" alt="Rising Nodes"></div>
+      <h2>Rising Nodes</h2>
+      <h3 class="mono">NODE NETWORK · 节点上升流</h3>
+      <p>蒸汽被画成一条从左下升向右上的节点链：节点越升越小，直到那枚珊瑚色火花——刚出炉的瞬间。AI 时代的气质，把"即时感"变成一条上升流。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v7-fat-t.svg" alt="Fat T"></div>
+      <h2>Fat T</h2>
+      <h3 class="mono">MODULAR GRID · 圆角方块拼 T</h3>
+      <p>五个圆角方块直接拼出一个粗 T，头顶一粒蒸汽点。最年轻、最直接、最有"开发者工具"气质——模块化、可由点阵运动，是离字标最近的一个。</p>
+      <div class="divider"></div>
+    </div>
+
+    <div class="card">
+      <div class="canvas"><div class="aura"></div><img class="logo" src="logo-variants/v8-line-t.svg" alt="Line T"></div>
+      <h2>Line T</h2>
+      <h3 class="mono">LINE FILL · 横线织成 T</h3>
+      <p>圆内横向排列的线条，以长短排序织出字母 T——像代码行、像文本流、像咖啡机的水平条纹。笔画融入载体，低调而有技术含金量。</p>
+      <div class="divider"></div>
+    </div>
+
+  </div>
+
+  <section class="scale-sec">
+    <h3>Scale Test · 16px / 32px 实尺（左白底 / 右墨底）</h3>
+    <div class="scale-row" id="scale-row"></div>
+  </section>
+
+  <footer>
+    <p>TeXPresso · Logo Design Exploration<br/>Generated with Logo Generator · 2026</p>
+  </footer>
+</div>
+
+<script>
+  const files = ["v1-crema-t","v2-dot-cup","v3-steam-waves","v4-hot-steam-cup","v5-pulse-ring","v6-rising-nodes","v7-fat-t","v8-line-t"];
+  const row = document.getElementById("scale-row");
+  files.forEach(f => {
+    const item = document.createElement("div");
+    item.className = "scale-item";
+    const mini = document.createElement("div");
+    mini.className = "scale-mini";
+    [16, 32].forEach(s => {
+      ["", "dark"].forEach(k => {
+        const cell = document.createElement("div");
+        cell.className = "cell " + k;
+        const img = document.createElement("img");
+        img.src = "logo-variants/" + f + ".svg";
+        img.width = s; img.height = s; img.alt = f;
+        img.style.filter = k === "dark" ? "brightness(0) invert(1)" : "";
+        cell.appendChild(img);
+        mini.appendChild(cell);
+      });
+    });
+    const b = document.createElement("b");
+    b.textContent = f;
+    item.appendChild(mini);
+    item.appendChild(b);
+    row.appendChild(item);
+  });
+</script>
+</body>
+</html>

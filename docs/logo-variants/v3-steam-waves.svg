@@ -1,0 +1,13 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="V3 Steam Waves">
+  <title>Steam Waves</title>
+  <g fill="none" stroke-linecap="round">
+    <!-- 杯体：一条弧 -->
+    <path d="M 25 58 Q 50 75, 75 58" stroke="#5D5FEF" stroke-width="3.4"/>
+    <!-- 蒸汽左道（蓝莓、更高） -->
+    <path d="M 42 47 C 37 41, 47 37, 42 31 C 37 25, 47 21, 42 15" stroke="#5D5FEF" stroke-width="2.8"/>
+    <!-- 蒸汽右道（珊瑚、更低） -->
+    <path d="M 58 47 C 53 41, 63 37, 58 31 C 53 25, 63 21, 58 15" stroke="#FF7A6E" stroke-width="2.8"/>
+    <!-- 蒸汽滴：脱离柱顶的一粒 -->
+    <circle cx="42" cy="10" r="2" fill="#FF7A6E" stroke="none"/>
+  </g>
+</svg>

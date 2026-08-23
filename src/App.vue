@@ -74,19 +74,43 @@ const isRunning = () => compile.phase === "running" || compile.phase === "queued
 <template>
   <div class="app">
     <div class="toolbar">
-      <button class="btn" @click="chooseProject">📂 打开项目</button>
-      <button class="btn primary" :disabled="isRunning()" @click="manualCompile">▶ 编译</button>
-      <button class="btn" :disabled="!isRunning()" @click="abort">■ 终止</button>
-      <span class="title">{{ project.project ? project.project.root : "TeXPresso" }}</span>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><img src="/logo.svg" width="22" height="22" alt="" /></span>
+        <span class="brand-name">TeXPresso</span>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn" @click="chooseProject">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h2.6l1.4 1.5H13a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12v-8.5Z" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span>打开项目</span>
+        </button>
+        <button
+          class="btn primary"
+          :class="{ typesetting: isRunning() }"
+          :disabled="isRunning()"
+          @click="manualCompile"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8a1 1 0 0 1 1.53-.85l8 5.2a1 1 0 0 1 0 1.7l-8 5.2a1 1 0 0 1-1.53-.85V2.8Z"/></svg>
+          <span>{{ isRunning() ? "排版中…" : "编译" }}</span>
+        </button>
+        <button class="btn ghost" :disabled="!isRunning()" @click="abort">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
+          <span>终止</span>
+        </button>
+      </div>
+      <span class="title" :title="project.project?.root ?? ''">
+        {{ project.project ? project.project.root : "" }}
+      </span>
+      <span class="title-fill" />
     </div>
 
     <div class="main">
-      <SplitPane direction="vertical" :initial="0.2">
+      <SplitPane direction="vertical" :initial="0.15">
         <template #primary>
           <FileTree />
         </template>
         <template #secondary>
-          <SplitPane direction="horizontal" :initial="0.65">
+          <!-- 编辑器 | PDF 预览：左右排布（vertical = 竖向分隔条），1:1 -->
+          <SplitPane direction="vertical" :initial="0.5">
             <template #primary>
               <div class="editor-area">
                 <TabBar />
@@ -120,22 +144,139 @@ const isRunning = () => compile.phase === "running" || compile.phase === "queued
 </template>
 
 <style>
+/* ============ 设计系统：Candy Desk（young & lively） ============ */
+:root {
+  --paper: #f4f2fb;        /* 淡紫罗兰纸面 */
+  --card: #ffffff;         /* 卡片 */
+  --card-2: #edeaf8;       /* 悬停/次级面 */
+  --ink: #2b2438;          /* 主墨色 */
+  --ink-dim: #7a7490;      /* 次级 */
+  --ink-faint: #b0aac6;    /* 三级 */
+  --line: #ded9ee;         /* 边框 */
+  --line-soft: #eae6f5;    /* 弱边框 */
+  --blueberry: #5d5fef;    /* 主色 */
+  --blueberry-deep: #4a4cd8;
+  --coral: #ff7a6e;        /* 强调/错误 */
+  --mango: #ffb54a;        /* 警告/脏 */
+  --mint: #2fbf8f;         /* 成功 */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-hard: 3px 3px 0 rgba(43, 36, 56, 0.09);
+  --shadow-hard-big: 5px 5px 0 rgba(43, 36, 56, 0.10);
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+
 html, body, #app { height: 100%; margin: 0; }
-body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #1e1e1e; color: #ccc; }
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: #dcd7f6; }
+
+:focus-visible { outline: 2px solid var(--blueberry); outline-offset: 2px; border-radius: 4px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #c9c2e4;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: #b3aad6; }
+::-webkit-scrollbar-corner { background: transparent; }
 </style>
 
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100%; }
-.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #252526; border-bottom: 1px solid #333; }
-.btn { background: #3a3d41; border: none; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-.btn:hover:not(:disabled) { background: #45484c; }
-.btn.primary { background: #0e639c; color: #fff; }
-.btn:disabled { opacity: 0.5; cursor: default; }
-.title { margin-left: 8px; font-size: 12px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- 工具栏 ---- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 14px;
+  background: var(--card);
+  border-bottom: 1.5px solid var(--line);
+  flex: 0 0 auto;
+}
+.brand { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.brand-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+}
+.brand-mark img { display: block; }
+.brand-name {
+  font-weight: 800; font-size: 14.5px; letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.toolbar-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 13px;
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 12.5px; font-weight: 550;
+  cursor: pointer;
+  box-shadow: var(--shadow-hard);
+  transition: transform 0.1s, box-shadow 0.1s, border-color 0.12s, background 0.12s;
+}
+.btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-hard-big);
+  border-color: #c8c0e8;
+}
+.btn:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: 1px 1px 0 rgba(43, 36, 56, 0.08); }
+.btn.primary {
+  background: linear-gradient(135deg, #6a5cff 0%, var(--blueberry) 50%, #4e9bff 120%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 2.5px 2.5px 0 rgba(93, 95, 239, 0.28);
+}
+.btn.primary:hover:not(:disabled) { border-color: transparent; box-shadow: 4px 4px 0 rgba(93, 95, 239, 0.30); }
+.btn.primary.typesetting {
+  background: linear-gradient(120deg, #6a5cff, #5d5fef, #4e9bff, #6a5cff);
+  background-size: 260% 100%;
+  animation: typeset-flow 1.1s linear infinite;
+}
+@keyframes typeset-flow { to { background-position: -260% 0; } }
+.btn.ghost {
+  background: transparent;
+  border: 1.5px dashed #c8c0e8;
+  box-shadow: none;
+}
+.btn.ghost:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--coral); color: var(--coral); }
+.btn:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+
+.title {
+  flex: 0 1 auto; min-width: 0;
+  font-size: 12px; color: var(--ink-faint);
+  font-family: var(--mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.title-fill { flex: 1 1 auto; }
+
+/* ---- 主体 ---- */
 .main { flex: 1 1 auto; min-height: 0; }
-.bottom { flex: 0 0 160px; min-height: 0; border-top: 1px solid #333; }
-.editor-area { display: flex; flex-direction: column; height: 100%; }
+.bottom { flex: 0 0 172px; min-height: 0; border-top: 1.5px solid var(--line); }
+.editor-area { display: flex; flex-direction: column; height: 100%; background: var(--card); }
 .editor-area > :last-child { flex: 1; min-height: 0; }
 .error-area { height: 100%; }
-.placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: #555; font-size: 12px; }
+.placeholder {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-faint); font-size: 12.5px; letter-spacing: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary.typesetting { animation: none; }
+}
 </style>
