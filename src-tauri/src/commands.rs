@@ -360,7 +360,10 @@ pub async fn update_settings(
     }
 
     // 2. 其余字段走全局设置
-    let mut global = state.settings.read().await.clone();
+    //    注意：必须读**纯全局**（磁盘 settings.json），而不能用 state.settings（合并后的
+    //    effective）——否则 effective 里的项目覆盖值会被当作“全局”参与 merge 的继承语义，
+    //    清除（root_file=null）后生效值仍是旧的（清不掉），正是“覆盖无法清除”的根因。
+    let mut global = state.storage.load_global(state.fs.as_ref()).await;
     let mut patch_global = patch.clone();
     patch_global.root_file = None; // root_file 已在上一步处理
     if patch_global != SettingsPatch::default() {

@@ -130,6 +130,11 @@ pub fn project_overrides_path(project_root: &Path) -> PathBuf {
 /// 原子写：临时文件 + rename（防崩溃截断；modules.md §6）。
 /// 写入属于 src-tauri 基础设施（FileSystem trait 只有读接口，core 纯度不受影响）。
 async fn atomic_write(path: &Path, content: &str) -> std::io::Result<()> {
+    // 父目录可能不存在（如项目覆盖 .texpresso/）：先创建，否则 write 直接失败，
+    // 覆盖只留在内存（重启即丢），表现为“设置/清除不持久”。
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
     let tmp = path.with_extension("json.tmp");
     tokio::fs::write(&tmp, content).await?;
     tokio::fs::rename(&tmp, path).await?;

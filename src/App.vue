@@ -16,6 +16,7 @@ import { useCompileStore } from "./stores/compile";
 import { useAutoSave } from "./composables/useAutoSave";
 import { ipc } from "./services/ipc";
 import { subscribeEvents } from "./services/events";
+import SettingsPanel from "./components/SettingsPanel.vue";
 
 const project = useProjectStore();
 const editor = useEditorStore();
@@ -69,6 +70,8 @@ async function abort() {
 }
 
 const isRunning = () => compile.phase === "running" || compile.phase === "queued";
+
+const settingsOpen = ref(false);
 </script>
 
 <template>
@@ -95,6 +98,9 @@ const isRunning = () => compile.phase === "running" || compile.phase === "queued
         <button class="btn ghost" :disabled="!isRunning()" @click="abort">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
           <span>终止</span>
+        </button>
+        <button class="btn icon" title="设置" @click="settingsOpen = true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
         </button>
       </div>
       <span class="title" :title="project.project?.root ?? ''">
@@ -140,6 +146,8 @@ const isRunning = () => compile.phase === "running" || compile.phase === "queued
     </div>
 
     <StatusBar :cursor-line="cursorLine" :cursor-col="cursorCol" />
+
+    <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
   </div>
 </template>
 
@@ -254,6 +262,8 @@ body {
   border: 1.5px dashed #c8c0e8;
   box-shadow: none;
 }
+.btn.icon { padding: 0 9px; }
+.btn.icon:hover:not(:disabled) { border-color: var(--blueberry); color: var(--blueberry); }
 .btn.ghost:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--coral); color: var(--coral); }
 .btn:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
