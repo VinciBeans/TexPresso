@@ -39,6 +39,40 @@ const pageCanvases: (HTMLCanvasElement | null)[] = [];
 const pageHighlights: (HTMLElement | null)[] = [];
 /** 已渲染页：页码 → 渲染时的 scale（换缩放后需重绘）。 */
 const renderedScale = new Map<number, number>();
+/** 在途渲染任务：页码 → RenderTask。pdf.js 不允许同一 canvas 并发渲染——
+ *  编译重载/缩放/IO+预渲染双触发时，必须先取消在途任务再启动新的，
+ *  否则两个 RenderTask 交错写同一个 2D context 会把页面画黑/花屏。 */
+const renderTaskByPage = new Map<number, pdfjsLib.RenderTask>();
+/** 每页串行渲染链：同页渲染严格 FIFO，杜绝同 canvas 交叉。 */
+const renderChainByPage = new Map<number, Promise<void>>();
+/** canvas 代次：文档/缩放切换时 +1，强制 v-for 重建 canvas DOM（全新 2D context，
+ *  物理上排除被取消渲染残留 transform 状态导致的“黑底/文字反转”问题）。 */
+const canvasEpoch = ref(0);
+
+/** 取消某页在途渲染并等其完全结束（pdf.js 要求：cancel 后必须等 promise settle
+ *  才能开始新的 render，否则两个任务仍会交错写同一个 2D context —— 页面画黑）。 */
+async function cancelRender(pageNum: number) {
+  const t = renderTaskByPage.get(pageNum);
+  if (!t) return;
+  renderTaskByPage.delete(pageNum);
+  try {
+    t.cancel();
+  } catch {
+    /* 已完成/已取消 */
+  }
+  try {
+    await t.promise;
+  } catch {
+    /* 被取消：正常路径 */
+  }
+}
+
+/** 取消全部在途渲染并等待结束（文档重载时调用，避免旧 doc 的渲染继续写画布）。 */
+async function cancelAllRenders() {
+  for (const pageNum of [...renderTaskByPage.keys()]) {
+    await cancelRender(pageNum);
+  }
+}
 
 /** synctex 坐标（顶部起算）→ pdf.js PDF 坐标（底部起算）。 */
 async function toPdfPoint(page: pdfjsLib.PDFPageProxy, x: number, yTop: number): Promise<[number, number]> {
@@ -46,10 +80,24 @@ async function toPdfPoint(page: pdfjsLib.PDFPageProxy, x: number, yTop: number):
   return [x, vp1.height - yTop];
 }
 
-/** 渲染指定页到该页 canvas（按当前 scale，含 devicePixelRatio 变换）。 */
-async function renderPage(pageNum: number) {
+/** 渲染指定页：入队到该页串行链（严格 FIFO），避免同 canvas 并发渲染。 */
+function renderPage(pageNum: number) {
   if (!doc || !pageCanvases[pageNum]) return;
   if (renderedScale.get(pageNum) === scale.value) return; // 已是最新
+  const prev = renderChainByPage.get(pageNum) ?? Promise.resolve();
+  const next = prev
+    .then(() => doRenderPage(pageNum))
+    .catch(() => {
+      /* 上一环失败不影响后续 */
+    });
+  renderChainByPage.set(pageNum, next);
+}
+
+/** 实际渲染（串行链内执行）：取消并等待旧任务结束后再画。 */
+async function doRenderPage(pageNum: number) {
+  if (!doc || !pageCanvases[pageNum]) return;
+  if (renderedScale.get(pageNum) === scale.value) return; // 已是最新
+  await cancelRender(pageNum);
   const page = await doc.getPage(pageNum);
   const canvas = pageCanvases[pageNum]!;
   const viewport = page.getViewport({ scale: scale.value });
@@ -61,13 +109,25 @@ async function renderPage(pageNum: number) {
   // 关键：canvas 物理像素 = viewport × dpr，必须传 dpr 变换，否则内容按 1x 绘制，
   // 只占 canvas 左上角 1/dpr（高 DPI 下内容偏左上、缩水）。
   const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
-  await page.render({ canvas, viewport, transform }).promise;
-  renderedScale.set(pageNum, scale.value);
+  const task = page.render({ canvas, viewport, transform });
+  renderTaskByPage.set(pageNum, task);
+  try {
+    await task.promise;
+    // 完成时若未被更新任务替换，记录已完成
+    if (renderTaskByPage.get(pageNum) === task) {
+      renderTaskByPage.delete(pageNum);
+      renderedScale.set(pageNum, scale.value);
+    }
+  } catch {
+    // 被取消或被取代：不留置 renderedScale（等待下次渲染）
+    if (renderTaskByPage.get(pageNum) === task) renderTaskByPage.delete(pageNum);
+  }
 }
 
 /** 释放远处页面：清空 canvas 尺寸，等待滚回时重绘。 */
 function releasePage(pageNum: number) {
   if (!pageCanvases[pageNum]) return;
+  void cancelRender(pageNum);
   const canvas = pageCanvases[pageNum]!;
   canvas.width = 0;
   canvas.height = 0;
@@ -137,7 +197,9 @@ async function setScale(next: number) {
   if (Math.abs(s - scale.value) < 0.005) return;
   const keep = container.value?.scrollTop ?? 0;
   scale.value = s;
+  canvasEpoch.value++; // 重建 canvas：全新 2D context，排除残留状态
   renderedScale.clear();
+  await cancelAllRenders();
   if (doc) {
     await nextTick();
     renderNearViewport();
@@ -182,6 +244,9 @@ async function load() {
     });
     doc = await loadingTask.promise;
     if (mySeq !== loadSeq) return; // 已被更新的加载取代
+    // 切换文档：取消并等待所有在途渲染结束（旧 doc 的 RenderTask 不允许继续写画布）
+    await cancelAllRenders();
+    canvasEpoch.value++; // 重建 canvas：全新 2D context，排除残留状态
     numPages.value = doc.numPages;
     renderedScale.clear();
     currentPageIdx.value = Math.min(currentPageIdx.value, numPages.value);
@@ -313,7 +378,7 @@ onBeforeUnmount(() => {
       <div class="pages" v-if="numPages > 0">
         <div
           v-for="n in numPages"
-          :key="n"
+          :key="`${n}-${canvasEpoch}`"
           class="page-wrap"
           :data-page="n"
           :ref="(el) => setPageEl(n, el as HTMLElement)"

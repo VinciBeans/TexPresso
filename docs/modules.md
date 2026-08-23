@@ -541,4 +541,4 @@ settings-changed: Settings
 ## 12. 与上层文档的关系
 
 - architecture.md §2/§3/§5 的模块表在本文件展开为函数级；**本文件冻结后，architecture.md 的模块表不再单独细化**
-- 新增后置项：`parse_forward_output`/`parse_inverse_output` 输出契约待 Windows 实测（ADR-0008 风险落地）；文件树增量刷新（当前全量重建）；**错误列表去重/截断**（环境性错误如缺字体触发 xelatex 错误雪崩时，单次编译可产生数十条同源错误，2026-08 实测暴露）
+- 新增后置项：`parse_forward_output`/`parse_inverse_output` 输出契约待 Windows 实测（ADR-0008 风险落地）；文件树增量刷新（当前全量重建）；~~错误列表去重/截断~~（**已实现** 2026-08：前端按「文件 + 首行消息」聚合同源错误并展示 ×N 计数，最多展示 30 组，超出的提示隐藏数量）
