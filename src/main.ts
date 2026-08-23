@@ -15,7 +15,22 @@ self.MonacoEnvironment = {
 monaco.editor.defineTheme("texpresso", {
   base: "vs",
   inherit: true,
-  rules: [],
+  rules: [
+    // ---- LaTeX 关键词高亮配色（Candy Desk）----
+    { token: "comment", foreground: "7f977e" },
+    { token: "keyword", foreground: "4a4cd8" },
+    { token: "keyword.command", foreground: "4a4cd8" },
+    { token: "keyword.env", foreground: "d1547e" },
+    { token: "string.env", foreground: "d1547e" },
+    { token: "keyword.math", foreground: "7c3aed" },
+    { token: "math", foreground: "8b5cf6" },
+    { token: "number", foreground: "2f9e8f" },
+    { token: "string.url", foreground: "2979b5" },
+    { token: "operator", foreground: "7a7490" },
+    { token: "delimiter", foreground: "a49dc0" },
+    { token: "string", foreground: "b0731c" },
+    { token: "text", foreground: "2b2438" },
+  ],
   colors: {
     "editor.background": "#ffffff",
     "editor.foreground": "#2b2438",
@@ -36,6 +51,15 @@ monaco.editor.defineTheme("texpresso", {
   },
 });
 monaco.editor.setTheme("texpresso");
+
+// ---- LaTeX 语法注册：关键字色彩高亮（自研 Monarch 语法，替代内置 grammar）----
+import { latexLanguage, latexConfiguration } from "./latexSyntax";
+// 本构建未内置 latex 语言，需先注册（未注册时 setLanguageConfiguration 会抛错 → 白屏）
+if (!monaco.languages.getLanguages().some((l) => l.id === "latex")) {
+  monaco.languages.register({ id: "latex" });
+}
+monaco.languages.setMonarchTokensProvider("latex", latexLanguage);
+monaco.languages.setLanguageConfiguration("latex", latexConfiguration);
 
 const app = createApp(App);
 app.use(createPinia());
