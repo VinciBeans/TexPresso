@@ -1,21 +1,23 @@
 # TeXPresso 文档索引
 
-> 项目状态：**设计收敛**（grill-with-docs 会话产出），待开工。
-> 开工条件以 MVP 边界为准，见 [design.md](./design.md)。
+> 项目状态：**开发中**（Windows 首发 MVP 已落地：项目/编辑/编译调度/错误去重/连续 PDF 预览+SyncTeX/设置页均可用）。
+> 产品入口与功能清单见 [根 README](../README.md)；设计权威仍是本目录。
 
 ## 文档结构
 
 | 文件 | 内容 |
 |---|---|
+| [根 README](../README.md) | 项目门面：特性、快速开始、仓库结构、Roadmap |
 | [CONTEXT.md](../CONTEXT.md) | 术语表（ubiquitous language） |
-| [design.md](./design.md) | 完整设计：产品定位、技术栈、编译子系统、MVP 边界、分发与质量底线 |
+| [design.md](./design.md) | 完整设计：产品定位、技术栈、编译子系统、MVP 边界、分发与质量底线（含后置/未决清单） |
 | [architecture.md](./architecture.md) | 分层设计：Rust/前端模块、层间接口契约、数据流、技术栈冻结、安全与工程基建 |
 | [modules.md](./modules.md) | 模块详细设计：大模块拆分、函数签名与算法、通信契约、信息局部性 |
 | [adr/](./adr/) | 决策记录（ADR），当前 9 项 |
+| [troubleshooting.md](./troubleshooting.md) | 排障记录（Windows 路径/工具链/日志解析场景） |
 
 ## 阅读顺序
 
-新成员：`CONTEXT.md → design.md → architecture.md → modules.md → adr/0001-0009`
+新成员：`根 README → CONTEXT.md → design.md → architecture.md → modules.md → adr/0001-0009`
 
 ## 决策记录索引
 
