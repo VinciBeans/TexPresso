@@ -1,14 +1,14 @@
 name: Sync to Gitee
 
-# GitHub 为 truth；每次推送到 master / 打标签后，把内容镜像到 Gitee。
-# 方向：GitHub → Gitee（单向）。运行在 GitHub runner 上，你无需挂 VPN。
+# GitHub 为 truth：每次推送到 master / 打标签后，把内容镜像到 Gitee。
+# 方向：GitHub → Gitee（单向），运行在 GitHub runner 上，无需本地 VPN。
 #
-# 需要配置 GitHub secret：
+# 需要的 GitHub secret（Settings → Secrets and variables → Actions）：
 #   GITEE_TOKEN  必填：Gitee 个人访问令牌（https://gitee.com/profile/personal_access_tokens），
-#                勾选 projects 权限（项目写权限）。以 `用户名:令牌` 作为 basic auth 推送。
+#                需勾选 projects（项目写）权限，以 `用户名:令牌` 作为 basic auth 推送。
 #   GITEE_USER   可选：Gitee 登录用户名；未设置时默认为 wenqibian。
 #
-# 注意：请与 Gitee 自带的「同步 GitHub」功能二选一，避免重复同步。
+# 未配置 GITEE_TOKEN 时本 job 会打印提示并直接成功退出（不会报红）。
 
 on:
   push:
@@ -19,19 +19,21 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # 未配置令牌时跳过，避免在真正配置前就报错
-    if: ${{ secrets.GITEE_TOKEN != '' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Push to Gitee
+      - name: Push to Gitee (mirror GitHub -> Gitee)
         env:
           GITEE_USER: ${{ secrets.GITEE_USER || 'wenqibian' }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "GITEE_TOKEN 未配置，跳过 Gitee 同步"
+            exit 0
+          fi
           git remote add gitee "https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/wenqibian/tex-presso.git"
           git push --force --all gitee
           git push --force --tags gitee
