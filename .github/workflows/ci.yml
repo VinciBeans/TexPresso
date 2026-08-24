@@ -1,0 +1,61 @@
+name: CI
+
+# 按 architecture.md §8 / ADR-0003 落地：
+#   cargo test + vue-tsc --noEmit + Windows runner tauri build 冒烟（验证 NSIS 打包链路）。
+# 注意：本仓库当前 origin 是 Gitee；GitHub Actions 需要镜像到 GitHub 才会触发。
+# 若只用 Gitee，请改用 Gitee Go（语法相近，见 docs 说明）。
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  check:
+    name: Type-check & core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # 文档化的前端质量门：vue-tsc --noEmit + vite build（含 copy:pdf-worker）。
+      # 此步曾因 strict-null 回归而失败，现已修复。
+      - name: Frontend type-check & build
+        run: npm run build
+
+      # core 纯逻辑（调度器合并/超时/重试/终止、日志解析快照、设置合并、根文件探测）。
+      # 无 Tauri/无 GUI 依赖，Linux 可跑；不运行 #[ignore] 的真实 TeX 集成测试。
+      - name: Core tests
+        run: cargo test -p texpresso-core
+
+  build-windows:
+    name: Windows build (NSIS smoke)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Windows 首发平台完整打包冒烟：beforeBuildCommand 会自动跑前端 build，
+      # 产物含 NSIS 安装包（ADR-0003 分发路径）。真实 TeX 集成测试为 #[ignore]，不在此触发。
+      - name: Tauri build (NSIS installer)
+        run: npm run tauri build
