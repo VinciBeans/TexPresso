@@ -53,7 +53,7 @@ onMounted(() => {
   monacoEditor.onDidChangeModelContent(() => {
     const model = monacoEditor!.getModel();
     const path = storePathOf(model);
-    if (!path) return;
+    if (!path || !model) return;
     editor.markDirty(path, model.getValue());
     emit("change", path);
   });

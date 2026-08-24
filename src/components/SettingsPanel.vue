@@ -140,7 +140,7 @@ async function resetDefaults() {
                 @click="setMode(m.value)"
               >{{ m.label }}</button>
             </div>
-            <p class="field-hint">{{ MODES.find(m => m.value === settings.compile.mode)?.hint }}</p>
+            <p class="field-hint">{{ MODES.find(m => m.value === settings?.compile.mode)?.hint }}</p>
           </div>
 
           <div class="field">
