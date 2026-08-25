@@ -13,7 +13,7 @@ vi.mock("../../services/ipc", () => ({
   },
 }));
 
-const ROOT = "E:/Works/tex-presso/000test";
+const ROOT = "E:/Works/tex-presso/test_file/projects/multifile";
 const MAIN = `${ROOT}/main.tex`;
 
 describe("editorStore", () => {

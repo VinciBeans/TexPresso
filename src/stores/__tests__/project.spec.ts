@@ -11,14 +11,14 @@ vi.mock("../../services/ipc", () => ({
 
 describe("normalizePath", () => {
   it("剥离磁盘绝对路径中的 `./`", () => {
-    expect(normalizePath("E:/Works/tex-presso/000test/./main.tex")).toBe(
-      "E:/Works/tex-presso/000test/main.tex"
+    expect(normalizePath("E:/Works/tex-presso/test_file/projects/multifile/./main.tex")).toBe(
+      "E:/Works/tex-presso/test_file/projects/multifile/main.tex"
     );
   });
 
   it("无 `./` 的绝对路径原样保留", () => {
-    expect(normalizePath("E:/Works/tex-presso/000test/main.tex")).toBe(
-      "E:/Works/tex-presso/000test/main.tex"
+    expect(normalizePath("E:/Works/tex-presso/test_file/projects/multifile/main.tex")).toBe(
+      "E:/Works/tex-presso/test_file/projects/multifile/main.tex"
     );
   });
 
@@ -42,20 +42,20 @@ describe("resolvePath", () => {
 
   function withProject(): ReturnType<typeof useProjectStore> {
     const store = useProjectStore();
-    store.project = { root: "E:/Works/tex-presso/000test" } as never;
+    store.project = { root: "E:/Works/tex-presso/test_file/projects/multifile" } as never;
     return store;
   }
 
   it("绝对路径（含 `./`）归一为项目内正斜杠路径", () => {
     const store = withProject();
-    expect(store.resolvePath("E:/Works/tex-presso/000test/./main.tex")).toBe(
-      "E:/Works/tex-presso/000test/main.tex"
+    expect(store.resolvePath("E:/Works/tex-presso/test_file/projects/multifile/./main.tex")).toBe(
+      "E:/Works/tex-presso/test_file/projects/multifile/main.tex"
     );
   });
 
   it("相对 `./main.tex` 拼接项目根", () => {
     const store = withProject();
-    expect(store.resolvePath("./main.tex")).toBe("E:/Works/tex-presso/000test/main.tex");
+    expect(store.resolvePath("./main.tex")).toBe("E:/Works/tex-presso/test_file/projects/multifile/main.tex");
   });
 
   it("`\\\\?\\` verbatim 防御直通", () => {
@@ -68,7 +68,7 @@ describe("refreshTreeDebounced（文件树增量刷新）", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     const store = useProjectStore();
-    store.project = { root: "E:/Works/tex-presso/000test" } as never;
+    store.project = { root: "E:/Works/tex-presso/test_file/projects/multifile" } as never;
     vi.useFakeTimers();
     vi.mocked(ipc.listDir).mockClear();
   });

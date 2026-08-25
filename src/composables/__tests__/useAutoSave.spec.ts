@@ -23,7 +23,7 @@ function withSetup<T>(composable: () => T): T {
   return result;
 }
 
-const MAIN = "E:/Works/tex-presso/000test/main.tex";
+const MAIN = "E:/Works/tex-presso/test_file/projects/multifile/main.tex";
 
 describe("useAutoSave", () => {
   beforeEach(() => {
