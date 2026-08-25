@@ -45,5 +45,6 @@
 - **tauri-driver 不打印 "listening"**：`beforeSession` 靠字符串匹配会永久卡住；改成**轮询 127.0.0.1:4444 是否可连**（`net.connect`）。
 - **只读沙箱限制**：vite/esbuild 的 worker 子进程需创建命名管道，`workspace-write` 下会 `EPERM`；需 `danger-full-access` 才能跑 `vite dev`/WebDriver/调起 WebView2 窗口。npm 缓存写 `%LocalAppData%` 也被拒，需把 `NPM_CONFIG_CACHE` 指到工作区。
 - **读取前端控制台**：pc-control 的 `screenshot` 返回 base64，需解码成图片再读；devtools 快捷键（F12/Ctrl+Shift+I）需窗口聚焦才生效。窗口标题不随 `document.title` 改变（Tauri 不同步），**不要**用它做观测通道。
+- **`webview_keyboard` 无法向 Monaco 编辑器插入文本（2026-08-25 实测定级）**：**不是 MCP 服务 bug**（`webview_keyboard type` 能在普通 `<input>` 上写入 `hello`，实测）；**是 Monaco（EditContext 架构）对合成事件不响应的限制**。Monaco 可编辑区是 `.native-edit-context`（DIV，`role=textbox`，走 EditContext）；`press` 只派发 `keydown/keypress/keyup`（**全部 `isTrusted:false`，且不产生 `beforeinput`/`input`**），合成键不触发浏览器默认文本插入（普通 input 上 `press` 同样不插入，实测），故 Monaco 不写入。`type` 靠 set `value` + `input` 事件，仅对原生 input/textarea 有效，且对 Monaco 唯一 textarea `.ime-text-area`（**readonly** 的 IME 缓冲）无效。**凡是涉及 Monaco 文本编辑的自动化，用真实 OS 按键（pc-control，`isTrusted:true` 触发 EditContext 插入，已实测 `Q` 写入），或改用 Monaco `executeEdits` API**（需实例，MCP 触不到）。
 
 **注意**：`e2e-tests/drivers/`（msedgedriver 二进制）与 `e2e-tests/node_modules/` 已 gitignore。
