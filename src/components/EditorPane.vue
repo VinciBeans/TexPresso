@@ -47,6 +47,8 @@ onMounted(() => {
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     language: "latex",
+    readOnly: true, // 未打开项目/文件时源码区不可编辑（防"空文件"可写误输入）
+    ariaLabel: "源码编辑器",
   });
 
   // 内容变更 → 脏标记 + 缓冲（自动保存的数据源）
@@ -83,6 +85,7 @@ watch(
     }
     modelPaths.set(model.uri.toString(), path);
     monacoEditor.setModel(model);
+    monacoEditor.updateOptions({ readOnly: false }); // 有活动文件即可编辑
     reportCursor();
   }
 );
@@ -94,6 +97,7 @@ watch(
   (path) => {
     if (path || !monacoEditor) return;
     monacoEditor.setModel(null);
+    monacoEditor.updateOptions({ readOnly: true }); // 无活动文件 → 源码区不可编辑
   }
 );
 
@@ -131,6 +135,7 @@ watch(
     const model = monaco.editor.getModel(uriOf(r.path));
     if (model) {
       monacoEditor.setModel(model);
+      monacoEditor.updateOptions({ readOnly: false }); // 揭示已打开文件应可编辑
       monacoEditor.revealLineInCenter(r.line);
       monacoEditor.setPosition({ lineNumber: r.line, column: 1 });
       monacoEditor.focus();
