@@ -503,7 +503,7 @@ useAutoSave 依赖 editorStore.dirtyPaths + settingsStore（读）
 
 | 组件 | 输入（props/事件） | 输出（emit） | 模块内信息 |
 |---|---|---|---|
-| EditorPane | model(路径)、内容、语言 | 变更事件 → useAutoSave | Monaco 实例、worker、IME 组合状态；**readOnly 跟随 activePath**（无活动文件 → 只读，防"空文件"可写误输入） |
+| EditorPane | model(路径)、内容、语言 | 变更事件 → useAutoSave | Monaco 实例、worker、IME 组合状态；**无活动文件 → 显示"还没有打开文件"占位提示**（覆盖 Monaco）+ `readOnly`，打开文件才可编辑 |
 | PreviewPane | pdfPath、highlight | 点击坐标 → useSyncTex | pdf.js 文档句柄、滚动位置缓存 |
 | FileTree | 树数据、激活路径 | 打开文件/目录展开 | 展开状态（只在前端本地） |
 | ErrorList | errors[] | 点击条目 → openFile+定位 | 无 |

@@ -151,9 +151,35 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="host" class="editor-pane" />
+  <div class="editor-pane">
+    <!-- Monaco 宿主始终挂载（编辑器初始化一次）；无活动文件时用占位提示覆盖 -->
+    <div ref="host" class="editor-body" />
+    <div v-if="!editor.activePath" class="editor-empty">
+      <span class="empty-icon">📄</span>
+      <span class="empty-title">还没有打开文件</span>
+      <span class="empty-hint">在左侧文件树点开一个 .tex 文件开始编辑</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.editor-pane { width: 100%; height: 100%; }
+.editor-pane { position: relative; width: 100%; height: 100%; }
+.editor-body { width: 100%; height: 100%; }
+
+/* 无活动文件时的占位提示（与文件树/PDF 空态一致的视觉语言） */
+.editor-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--card);
+  color: var(--ink-faint);
+  pointer-events: none; /* 不拦截 Monaco 的后续交互（有文件后该节点被移除） */
+}
+.editor-empty .empty-icon { font-size: 38px; display: block; }
+.editor-empty .empty-title { display: block; margin-top: 12px; font-size: 14px; font-weight: 700; color: var(--ink-dim); }
+.editor-empty .empty-hint { display: block; margin-top: 6px; font-size: 12px; }
 </style>
