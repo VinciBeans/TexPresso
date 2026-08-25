@@ -37,7 +37,7 @@ npm run tauri dev  # 启动开发（vite + Tauri，首次会编译 Rust ~数分�
 
 ### 使用
 
-1. 点「打开项目」选择一个含 `.tex` 的文件夹（如 `000test/`，仓库内本地测试工程）；
+1. 点「打开项目」选择一个含 `.tex` 的文件夹（如 `000test/`，仓库内本地测试工程，现为**多文件 + 跨文件引用**结构）；
 2. 编辑 `main.tex` → 自动编译 → 右侧 PDF 实时更新（首次自动"适应宽度"）；
 3. `Ctrl+点击` 源码 → PDF 高亮；点击 PDF 任意位置 → 跳回源码；
 4. 「编译」按钮手动编译；「⚙ 设置」调整引擎/模式/超时等。
@@ -58,7 +58,7 @@ npm run tauri dev  # 启动开发（vite + Tauri，首次会编译 Rust ~数分�
 
 ## 🧪 测试与质量
 
-- `cargo test`（core + src-tauri）：调度器语义、日志解析快照、设置合并、路径校验（含 Windows verbatim 探测）
+- `cargo test -p texpresso-core`：调度器语义、日志解析快照、设置合并、根文件探测、路径校验（含 Windows verbatim 探测）
 - 前端：`npm run test`（vitest 单测：stores 路径归一化 / editor 自保存过滤与冲突 / useAutoSave 防抖）+ `npm run build` 类型检查；手动验收清单见 [docs/design.md](./docs/design.md)（打开→编译→报错→修改→恢复→预览全链路）
 
 ## 📚 文档索引
@@ -73,7 +73,11 @@ npm run tauri dev  # 启动开发（vite + Tauri，首次会编译 Rust ~数分�
 
 ## 🛣️ Roadmap（后置清单）
 
-增量编译策略深化 → 错误列表（已完成去重/截断）→ texlab LSP（\ref/\cite 补全、hover、跳转定义）→ 设置页（已完成 v1）→ 文件树增量刷新 → 代码片段/拼写检查 → 外部 PDF 查看器 → TinyTeX 内嵌兜底 → 引擎按系统语言自适应 → 自动更新（tauri-updater，不强制）→ 多窗口与多项目。
+**已落地**：错误列表去重/截断、设置页 v1、文件树增量刷新（内容修改跳过、仅结构变化重建）。
+
+**已实测（暂不过）**：增量编译——latexmk「增量」=整份文档单遍重排，属 xelatex 引擎上限（见 [ADR-0005](./docs/adr/0005-latexmk-first-incremental-next.md)）。
+
+**待续**：texlab LSP（v1.1 规划：\ref/\cite 补全、hover、跳转定义）→ 代码片段/拼写检查 → 外部 PDF 查看器 → TinyTeX 内嵌兜底 → 引擎按系统语言自适应 → 自动更新（tauri-updater，不强制）→ 多窗口与多项目。
 
 > 详细规划见 [docs/design.md](./docs/design.md)「后置/未决清单」。
 

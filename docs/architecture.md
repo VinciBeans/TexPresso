@@ -1,6 +1,6 @@
 # TeXPresso 架构设计（分层、接口、模块、技术栈）
 
-> 项目状态：**设计收敛**（grill-with-docs 会话产出），待开工。
+> 项目状态：**已实现**（Windows 首发 MVP 落地，迭代中）。
 > 上层设计见 [design.md](./design.md)，术语见根目录 [CONTEXT.md](../CONTEXT.md)，决策记录见 [adr/](./adr/)。
 
 ## 1. 分层总览
@@ -69,6 +69,7 @@ Cargo workspace 两 crate（见 ADR-0006）：
 | 命令 | 输入 | 输出 |
 |---|---|---|
 | open_project | folder | ProjectInfo（含根文件探测结果） |
+| list_dir | path | Vec\<DirEntryInfo\>（递归文件树，含目录；前端防抖） |
 | read_file / write_file | path [, content] | content / 空 |
 | save_all / save_file | [path] | 空 |
 | compile_now | 空 | 空 |
@@ -86,7 +87,7 @@ Cargo workspace 两 crate（见 ADR-0006）：
 | compile-status | { phase: queued\|running\|success\|failed, kind?: timeout\|content_error\|aborted } |
 | errors-updated | ErrorEntry[]（失败时携带；编译中清空） |
 | pdf-updated | { path }（编译成功、PDF 新版本就绪） |
-| files-changed | { paths }（监视旁路：文件树刷新/重载判定） |
+| files-changed | { paths, structural }（监视旁路：文件树刷新/重载判定；`structural`=true 仅增/删/重命名，内容修改为 false——见 modules.md §7） |
 | settings-changed | Settings |
 
 不做编译输出流式推送——.log 文件是权威，避免 IPC 风暴。

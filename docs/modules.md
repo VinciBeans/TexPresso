@@ -251,7 +251,9 @@ pub trait FileSystem: Send + Sync {
 /// 递归收集项目内全部 .tex（排除 tmp/ 与隐藏目录），不跟随符号链接（防环）。
 pub async fn collect_tex_files(fs: &dyn FileSystem, root: &Path) -> io::Result<Vec<PathBuf>>;
 /// 忽略规则（与 watch 共用同一函数，单一事实来源）
-pub fn is_ignored(path: &Path) -> bool;   // tmp/ 前缀、.git 等隐藏目录、非 .tex
+pub fn is_ignored(path: &Path, root: &Path) -> bool;   // tmp/ 前缀、.git 等隐藏目录、非 .tex
+/// 文件树忽略规则（只藏 tmp/ 与隐藏项，树展示所有扩展名；与 is_ignored 不同）
+pub fn is_tree_excluded(path: &Path, root: &Path) -> bool;
 ```
 
 **算法**：DFS 递归；每个目录先 `read_dir`，逐项判定 `is_ignored`，目录递归、.tex 收集。**函数内**持有递归栈与缓冲；**模块内**无缓存（每次调用全量扫描——文件树重建与探测都调它，目录量大时再优化增量）。
@@ -342,7 +344,7 @@ synctex（core）         synctex_cli（src-tauri）
 
 ```rust
 // core
-pub struct SourcePosition { pub file: PathBuf, pub line: u32, pub column: u32 }
+pub struct SourcePosition { pub file: PathBuf, pub line: u32, pub column: i32 }   // column=-1 表示未知（synctex 1.21+ 实测）
 pub struct SyncTexPosition { pub page: u32, pub x: f32, pub y: f32 }
 
 #[async_trait]
@@ -358,7 +360,7 @@ pub fn parse_forward_output(text: &str) -> Result<SyncTexPosition>;  // 纯函�
 pub fn parse_inverse_output(text: &str) -> Result<SourcePosition>;   // 纯函数，可单测
 ```
 
-**算法**：CLI 输出契约（`Page:N x:.. y:..` / `File:.. Line:.. Column:..`）需 Windows 实测定稿（ADR-0008 已记风险）；两个 `parse_*` 是纯函数，实测后以快照固化。pdf 路径指向 `tmp/<root>.synctex.gz` 对应 PDF 的**项目根副本**（synctex 按文件名关联）。
+**算法**：CLI 输出契约**已 Windows 实测定稿**（2026-08-25，见 ADR-0008）：`view` 可能返回多个 `Output:` 块 → `parse_forward_output` 取**首个完整块**；`edit` 输出 `Input:`（正斜杠 + `./` 路径）与 `Column:-1` → `parse_inverse_output` 处理，`Input` 路径需经 `project.resolvePath` 归一化。两者均以真实 Windows 输出固化单测（`provider.rs`）。pdf 路径指向 `tmp/<root>.synctex.gz` 对应 PDF 的**项目根副本**（synctex 按文件名关联），必须传 `-d <tmp>` 参数。
 
 **信息局部性**：provider 无状态；一次调用 = 一次 spawn + 一次解析。前端高亮 overlay 与滚动恢复是预览模块自己的事，不流入此模块。
 
@@ -458,14 +460,14 @@ export const ipc = { openProject, listDir, readFile, writeFile, saveAll, saveFil
                      compileNow, abortCompile, synctexForward, synctexInverse,
                      getSettings, updateSettings }  // 均为 Promise<T>
 
-// events.ts —— 订阅一次，分发到各 store；返回取消函数
-export function subscribeEvents(stores: { project, editor, compile, preview, settings }): () => void
+// events.ts —— 订阅一次，分发到各 store（内部经 useXxxStore() 取实例）；返回取消函数
+export function subscribeEvents(): () => void
 // 映射表（单向：事件 → store 动作）：
 //   compile-status → compileStore.setStatus
 //   errors-updated → compileStore.setErrors
 //   pdf-updated    → previewStore.reload
 //   files-changed  → editorStore.onFilesChanged(paths)（过滤+重载判定）
-//                     projectStore.refreshTreeDebounced()（300ms 防抖）
+//                     projectStore.refreshTreeDebounced(structural)（300ms 防抖；仅结构变化重建）
 //   settings-changed → settingsStore.setSettings
 ```
 
@@ -476,7 +478,7 @@ export function subscribeEvents(stores: { project, editor, compile, preview, set
 settingsStore ← projectStore（读设置）← editorStore（读设置/项目）
 settingsStore ← compileStore
 events.ts 是唯一"写"多个 store 的地方（订阅分发）
-useAutoSave 依赖 editorStore.dirtyPaths + settingsStore（读）
+useAutoSave 依赖 editorStore.dirty + settingsStore（读）
 ```
 
 | store | 状态（模块内） | 动作 |
@@ -517,7 +519,7 @@ useAutoSave 依赖 editorStore.dirtyPaths + settingsStore（读）
 compile-status: { phase: 'queued'|'running'|'success'|'failed', kind?: 'timeout'|'content_error'|'aborted' }
 errors-updated: ErrorEntry[]                       // 失败时携带；编译启动时清空由前端 setStatus('running') 触发
 pdf-updated:    { path: string }
-files-changed:  { paths: string[] }
+files-changed:  { paths: string[], structural: boolean }   // structural=true 仅增/删/重命名（文件树重建）；内容修改为 false（跳过）
 settings-changed: Settings
 ```
 

@@ -1,6 +1,6 @@
 # TeXPresso 文档索引
 
-> 项目状态：**开发中**（Windows 首发 MVP 已落地：项目/编辑/编译调度/错误去重/连续 PDF 预览+SyncTeX/设置页均可用）。2026-08 增：GitHub 为 truth + Gitee 镜像同步、GitHub Actions CI、WebDriver 端到端测试；增量编译与预览重载进入实测优化阶段（结论见 [design.md](./design.md)、[modules.md](./modules.md)、[troubleshooting.md](./troubleshooting.md)）。
+> 项目状态：**已实现并迭代中**（Windows 首发 MVP 落地：项目/编辑/编译调度/错误去重/连续 PDF 预览+SyncTeX/设置页均可用）。2026-08 演进：GitHub 为 truth + Gitee 镜像同步、GitHub Actions CI（cargo test + `vue-tsc` + 前端 vitest）、tauri server MCP 验证基建、预览重载 A/B 优化（分页虚拟化 + 同文件 canvas 复用）、文件树增量刷新、SyncTeX 契约定稿、前端 vitest 单测、编辑器空文件占位修复、多文件测试工程（`000test/`）。增量编译结论（**暂不过 latexmk**）见 [ADR-0005](./adr/0005-latexmk-first-incremental-next.md)；e2e 以 **tauri server MCP 驱动真实窗口**为主（WebDriver 半配置、仅作备选），操作要点见 [troubleshooting.md](./troubleshooting.md)。
 > 产品入口与功能清单见 [根 README](../README.md)；设计权威仍是本目录。
 
 ## 文档结构
