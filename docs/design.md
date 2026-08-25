@@ -70,7 +70,9 @@
 
 对照预算：中小文档增量 1.5–2.3s，落在"大文档 3s 优秀"线内/附近；小文档接近及格线；**真正大文档（数百页/重图/bib）单遍必然超预算，属引擎上限**（后续文档预算说明需如实标注）。
 
-**端到端延迟**（编辑 → PDF 刷新 ≈ 防抖 500ms + latexmk + pdf.js 重载）：`000test` 重载实测 `fetch≈7ms / parse≈103ms / render≈320ms / total≈400–450ms` → **render 占 ~75% 是瓶颈**（`canvasEpoch` 整页 canvas 重建 + 视口重绘 + 二次 `renderNearViewport`）。**A/B 优化已落地**（分页 DOM 虚拟化 + 同文件重载复用 canvas、仅缩放/换文档才重建）——见 [modules.md](./modules.md) §12；本会话验证到 build 通过 + tauri dev 真实窗口可开项目/编译，pixel/时序测量受工具限制未获新数值。
+**端到端延迟**（编辑 → PDF 刷新 ≈ 防抖 500ms + latexmk + pdf.js 重载）：`000test` 重载实测 `fetch≈7ms / parse≈103ms / render≈320ms / total≈400–450ms` → **render 占 ~75% 是瓶颈**（`canvasEpoch` 整页 canvas 重建 + 视口重绘 + 二次 `renderNearViewport`）。**A/B 优化已落地**（分页 DOM 虚拟化 + 同文件重载复用 canvas、仅缩放/换文档才重建）——见 [modules.md](./modules.md) §12。
+
+**A/B 优化后真实窗口复测（2026-08-25，tauri server MCP 驱动）**：`npm run tauri dev` + `VITE_TEXPRESSO_PROJECT=000test` 自动开项目 → 点「编译」→ `main.pdf`(3 页/108KB) 重载。**像素级视觉确认通过**（标题页/目录/正文正常，无黑屏/文字反转——此前受限点已解决）。**插桩修正**：把 `render` 从 setup 时间改为等挂载窗口渲染链落盘后的真实 canvas 绘制耗时（原 `pagesRendered` 恒 0）。**实测**：同文件复用 `fetch≈9–10ms / parse≈30ms / render≈59ms / total≈98–100ms / pagesRendered=2`；首次换文档 `render≈77ms / total≈112ms / pagesRendered=3`。**render 占总耗时 ~59%，仍为 PDF 重载开销主因**（一致结论）；3 页小文档总耗时 ~100ms 远低于延迟预算（先前 `render≈320ms/total≈400–450ms` 是 12 页文档数值，非同比）。
 
 ## 预览
 

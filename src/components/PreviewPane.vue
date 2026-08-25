@@ -395,6 +395,9 @@ async function load() {
     // 恢复后再渲染一次（字体加载可能改变布局）
     await nextTick();
     renderNearViewport();
+    // 等本次挂载窗口的渲染链全部落盘（真实 canvas 绘制耗时）。
+    // 原实现 render=setup 时间、pagesRendered 恒为 0，无法反映渲染瓶颈（modules.md §12）。
+    await Promise.allSettled([...renderChainByPage.values()]);
     const tDone = performance.now();
     const timing = {
       reload: mySeq,
