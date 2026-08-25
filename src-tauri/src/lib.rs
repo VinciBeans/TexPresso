@@ -29,7 +29,14 @@ pub fn run() {
             .expect("导出 TypeScript 绑定失败");
     }
 
-    tauri::Builder::default()
+    // MCP Bridge 插件（仅调试构建）：供 tauri server MCP（driver_session / webview_* / ipc_* / read_logs）
+    // 连接到本应用。仅 debug build 注册，不进入生产（插件自身也是 debug-only）。
+    #[cfg(debug_assertions)]
+    let app_builder = tauri::Builder::default().plugin(tauri_plugin_mcp_bridge::init());
+    #[cfg(not(debug_assertions))]
+    let app_builder = tauri::Builder::default();
+
+    app_builder
         .plugin(tauri_plugin_log::Builder::new().skip_logger().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
