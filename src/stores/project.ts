@@ -17,7 +17,7 @@ export const useProjectStore = defineStore("project", () => {
     return project.value;
   }
 
-  /** 全量重建文件树（files-changed 防抖后调用，modules.md Q1）。 */
+  /** 全量重建文件树（打开项目 / 结构变化时调用）。 */
   async function refreshTree() {
     if (!project.value) return;
     tree.value = await ipc.listDir(project.value.root);
@@ -25,10 +25,19 @@ export const useProjectStore = defineStore("project", () => {
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
-  /** 300ms 防抖重建（modules.md §5.5）。 */
-  function refreshTreeDebounced() {
+  /** 是否有待处理的结构变化（防抖窗口内被内容修改覆盖也不丢失）。 */
+  let pendingStructural = false;
+  /** 300ms 防抖重建（modules.md §5.5）。`structural=true`（增/删/重命名）才重建；
+   *  内容修改（自动保存等）传 false → 跳过，避免每次编辑都全量重扫（增量刷新）。
+   *  结构变化一旦 pending，后续内容修改不清除该意图。 */
+  function refreshTreeDebounced(structural = false) {
+    if (structural) pendingStructural = true;
     clearTimeout(timer);
-    timer = setTimeout(() => refreshTree().catch(() => {}), 300);
+    if (!pendingStructural) return; // 内容修改且无结构变化 pending → 跳过
+    timer = setTimeout(() => {
+      refreshTree().catch(() => {});
+      pendingStructural = false;
+    }, 300);
   }
 
   /** 相对路径（如 ./main.tex、chapters/a.tex）解析为项目内绝对路径。

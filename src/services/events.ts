@@ -26,8 +26,9 @@ export function subscribeEvents(): () => void {
     events.filesChanged.listen((e) => {
       const p = e.payload as any;
       const paths: string[] = p.paths ?? [];
+      const structural: boolean = p.structural ?? true; // 缺省按结构变化处理（保守）
       useEditorStore().onFilesChanged(paths);
-      useProjectStore().refreshTreeDebounced();
+      useProjectStore().refreshTreeDebounced(structural);
     }),
     events.settingsChanged.listen((e) => {
       useSettingsStore().setSettings(e.payload as any);

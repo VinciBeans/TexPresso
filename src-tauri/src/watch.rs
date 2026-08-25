@@ -123,6 +123,16 @@ fn should_process(event: &notify::Event) -> bool {
     !matches!(event.kind, notify::EventKind::Access(_))
 }
 
+/// 是否结构变化（增/删/重命名）——文件树需重建；内容修改（自动保存等）为 false。
+fn is_structural_event(event: &notify::Event) -> bool {
+    matches!(
+        event.kind,
+        notify::EventKind::Create(_)
+            | notify::EventKind::Remove(_)
+            | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+    )
+}
+
 fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Option<&Path>) {
     debug!("watch 原始事件: {:?} kind={:?}", event.paths, event.kind);
     if !should_process(event) {
@@ -154,7 +164,7 @@ fn handle_event(event: &notify::Event, state: Arc<WatchState>, project_root: Opt
         }
         // 3. 其余（含非 .tex、目录变化）→ 文件树刷新广播
         if !is_tree_excluded(&path, root) {
-            broadcast_files_changed(&[path], &state);
+            broadcast_files_changed(&[path], &state, is_structural_event(event));
         }
     }
 }
@@ -251,7 +261,7 @@ fn trigger_compile(path: &Path, state: Arc<WatchState>) {
     });
 }
 
-fn broadcast_files_changed(paths: &[PathBuf], state: &WatchState) {
+fn broadcast_files_changed(paths: &[PathBuf], state: &WatchState, structural: bool) {
     let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-    let _ = FilesChangedEvent(FilesChanged { paths }).emit(&state.app);
+    let _ = FilesChangedEvent(FilesChanged { paths, structural }).emit(&state.app);
 }

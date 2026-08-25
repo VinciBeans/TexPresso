@@ -541,7 +541,7 @@ settings-changed: Settings
 ## 12. 与上层文档的关系
 
 - architecture.md §2/§3/§5 的模块表在本文件展开为函数级；**本文件冻结后，architecture.md 的模块表不再单独细化**
-- 新增后置项：~~`parse_forward_output`/`parse_inverse_output` 输出契约~~（**已 Windows 实测定稿** 2026-08-25：`view` 可能多块、取**首个完整块**；`edit` 用 `Input:`/`Column:-1`，`Input` 路径为**正斜杠+`./`**需归一化——见 ADR-0008）；文件树增量刷新（当前全量重建）；~~错误列表去重/截断~~（**已实现** 2026-08：前端按「文件 + 首行消息」聚合同源错误并展示 ×N 计数，最多展示 30 组，超出的提示隐藏数量）
+- 新增后置项：~~`parse_forward_output`/`parse_inverse_output` 输出契约~~（**已 Windows 实测定稿** 2026-08-25：`view` 可能多块、取**首个完整块**；`edit` 用 `Input:`/`Column:-1`，`Input` 路径为**正斜杠+`./`**需归一化——见 ADR-0008）；~~文件树增量刷新~~（**已实现** 2026-08-25：`files-changed` 载荷加 `structural`，仅**结构变化（增/删/重命名）**才防抖重建，内容修改如自动保存跳过——见 §7 watch.rs + §9.2 project.ts；后端 `is_structural_event`）；~~错误列表去重/截断~~（**已实现** 2026-08：前端按「文件 + 首行消息」聚合同源错误并展示 ×N 计数，最多展示 30 组，超出的提示隐藏数量）
 - **pdf.js 重载耗时实测（2026-08）**：`fetch≈7ms / parse≈103ms / render≈320ms / total≈400–450ms`（`000test`，见 design.md）。**render 是瓶颈（~75%）**——`PreviewPane.load()` 每次强制 `canvasEpoch++`（整页 canvas DOM 重建）+ 视口页全量重绘 + 二次 `renderNearViewport`。**A/B 优化已实现（2026-08）**：
   - **A. 分页 DOM 虚拟化**：只挂载视口窗口内页（`mountStart..mountEnd`，前后各 `PAGE_WINDOW=6`），顶部/底部占位撑住总高度（滚动条稳定）；`renderNearViewport`/`updateCurrentPage` 只遍历窗口内页 → **由 O(总页数) 降为 O(视口)**。移除 `IntersectionObserver`，改 scroll 驱动 + 窗口变化 watcher + 容器 `ResizeObserver`。
   - **B. 选择性 canvas 重建**：`canvasEpoch` → `structuralEpoch`，**仅缩放/换文档才 `++`（重建 DOM）**；同文件内容重载**复用 DOM**（`doRenderPage` 每次 `canvas.width=` 即重置 2D context；每页串行链已 cancel+await，黑屏/反转机制在代码层排除）。`pageH1`（scale=1 页高）同文件重载**保留** → 滚动恢复精确。

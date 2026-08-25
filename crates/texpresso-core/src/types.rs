@@ -94,9 +94,12 @@ pub struct PdfUpdated {
 }
 
 /// files-changed 事件载荷。
+/// `structural`：是否为结构变化（增/删/重命名）。内容修改（如自动保存）为 false——
+/// 文件树因此可跳过重建（modules.md §12「文件树增量刷新」）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct FilesChanged {
     pub paths: Vec<String>,
+    pub structural: bool,
 }
 
 /// 文件写入载荷（save_all 命令输入）。
