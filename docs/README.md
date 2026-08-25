@@ -1,6 +1,6 @@
 # TeXPresso 文档索引
 
-> 项目状态：**开发中**（Windows 首发 MVP 已落地：项目/编辑/编译调度/错误去重/连续 PDF 预览+SyncTeX/设置页均可用）。
+> 项目状态：**开发中**（Windows 首发 MVP 已落地：项目/编辑/编译调度/错误去重/连续 PDF 预览+SyncTeX/设置页均可用）。2026-08 增：GitHub 为 truth + Gitee 镜像同步、GitHub Actions CI、WebDriver 端到端测试；增量编译与预览重载进入实测优化阶段（结论见 [design.md](./design.md)、[modules.md](./modules.md)、[troubleshooting.md](./troubleshooting.md)）。
 > 产品入口与功能清单见 [根 README](../README.md)；设计权威仍是本目录。
 
 ## 文档结构

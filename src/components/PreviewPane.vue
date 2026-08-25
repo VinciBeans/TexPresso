@@ -1,10 +1,14 @@
 <!-- PreviewPane（modules.md §9.4）：pdf.js 封装。
-   连续分页展示：所有页面纵向排列，视口感知按需渲染（近处渲染、远处释放）。
-   滚动保持：重载前记录滚动，加载后恢复（modules.md §5.2）。
+   连续分页展示：**分页 DOM 虚拟化**——只挂载视口窗口内的页（前后各 PAGE_WINDOW 页），
+   用顶部/底部占位撑住总高度（滚动条稳定），视口感知按需渲染（近处渲染、远处释放）。
+   滚动保持：重载前记录滚动，加载后恢复；同文件内容重载保留 pageH1（scale=1 页高）→ 恢复精确。
+   canvas 复用：`structuralEpoch` 仅在**缩放/换文档**时 +1 强制重建 canvas DOM（全新 2D context，
+   物理排除被取消渲染残留状态）；**同文件内容重载不再重建**，复用 DOM（doRenderPage 每次
+   canvas.width= 重置即获全新 context，且 renderPage 串行链已 cancel+await —— 排除黑屏/翻转回归）。
    SyncTeX：高亮 overlay 绘制（跟随对应页）；点击反向定位。
    缩放：工具条 − / % / + / 适应宽度 + Ctrl+滚轮；高亮与反向定位跟随当前缩放。 -->
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as pdfjsLib from "pdfjs-dist";
 import { usePreviewStore } from "../stores/preview";
@@ -22,6 +26,12 @@ const SCALE_MIN = 0.5;
 const SCALE_MAX = 4;
 const RENDER_MARGIN = 800; // 视口外预渲染/释放的边距（px）
 
+/** 分页虚拟化窗口：当前挂载的页码范围（前后各 PAGE_WINDOW 页）。 */
+const PAGE_WINDOW = 6;
+const PAGE_GAP = 18;   // 页间距（.page-wrap margin-bottom，px）
+const PAD_TOP = 18;    // .pages 顶部留白（px，移入顶部占位）
+const PAD_BOTTOM = 40; // .pages 底部留白（px，移入底部占位）
+
 let doc: pdfjsLib.PDFDocumentProxy | null = null;
 let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 /** 总页数与当前页（响应式：页码指示器展示用）。 */
@@ -33,7 +43,7 @@ let loadSeq = 0;
 /** 是否已做过首次“适应宽度”：只有首次加载自动 fit，之后保留用户手动缩放。 */
 let fittedOnce = false;
 
-// ---------- 分页 DOM 引用（模板 ref 回调） ----------
+// ---------- 分页 DOM 引用（模板 ref 回调，仅挂载窗口内的页有值） ----------
 const pageEls: (HTMLElement | null)[] = [];
 const pageCanvases: (HTMLCanvasElement | null)[] = [];
 const pageHighlights: (HTMLElement | null)[] = [];
@@ -45,9 +55,103 @@ const renderedScale = new Map<number, number>();
 const renderTaskByPage = new Map<number, pdfjsLib.RenderTask>();
 /** 每页串行渲染链：同页渲染严格 FIFO，杜绝同 canvas 交叉。 */
 const renderChainByPage = new Map<number, Promise<void>>();
-/** canvas 代次：文档/缩放切换时 +1，强制 v-for 重建 canvas DOM（全新 2D context，
- *  物理上排除被取消渲染残留 transform 状态导致的“黑底/文字反转”问题）。 */
-const canvasEpoch = ref(0);
+/**
+ * canvas 代次（结构性重建）：**仅缩放 / 换文档（文件路径变化）时 +1**，强制 v-for 重建
+ * canvas DOM（全新 2D context，物理排除被取消渲染残留 transform 状态的“黑底/文字反转”）。
+ * 同文件内容重载不 +1 → 复用现有 DOM（doRenderPage 每次 canvas.width= 即重置 context）。
+ */
+const structuralEpoch = ref(0);
+/** 上次加载的 PDF 路径：判断“同文件内容重载”（复用 DOM/页高） vs “换文档”（重建）。 */
+let lastDocPath = "";
+/** 本次 reload 实际完成绘制的页数（插桩统计：诊断重载渲染成本）。 */
+let pagesRenderedThisLoad = 0;
+
+// ---------- 页高缓存（scale=1）与前缀和：虚拟化占位 + 窗口计算 + 滚动保持 ----------
+/** 各页 scale=1 高度（下标 1..N，0 占位）。同文件内容重载保留 → 布局稳定。 */
+const pageH1: number[] = [0];
+/** 前缀和：prefixH1[i] = 前 i 页（1..i）scale=1 高度和。 */
+const prefixH1: number[] = [0];
+/** 高度预热任务序号（防重入/过期）。 */
+let heightWarmId = 0;
+/** 虚拟化窗口：当前需挂载的页码范围。 */
+const mountStart = ref(1);
+const mountEnd = ref(1);
+
+/** 取前缀和（缺省 0）。 */
+function pf(i: number): number {
+  return prefixH1[i] || 0;
+}
+/** 重建前缀和（O(N)，页高变化时调用；N 数百时开销可忽略）。 */
+function recomputePrefix() {
+  const N = numPages.value;
+  if (prefixH1.length < N + 1) prefixH1.length = N + 1;
+  prefixH1[0] = 0;
+  for (let i = 1; i <= N; i++) prefixH1[i] = prefixH1[i - 1] + (pageH1[i] || 0);
+}
+/** 记录第 n 页 scale=1 高度并更新前缀和（幂等：同值跳过）。 */
+function setHeight(n: number, h1: number) {
+  if (pageH1[n] === h1) return;
+  pageH1[n] = h1;
+  recomputePrefix();
+}
+/** 第 n 页顶部相对内容区顶部（含顶部留白）的偏移（当前 scale）。 */
+function pageTop(n: number): number {
+  return PAD_TOP + pf(n - 1) * scale.value + (n - 1) * PAGE_GAP;
+}
+/** 内容坐标 y 所在页：返回上边界 ≤ y 的最大页（闭区间二分，O(log N)）。 */
+function pageAtY(y: number): number {
+  const N = numPages.value;
+  let lo = 1;
+  let hi = N;
+  let ans = 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (pageTop(mid) <= y) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+/** 顶部占位高度：PAD_TOP + 挂载窗口之前所有页（高度 + 间距）。 */
+const topSpacerH = computed(() => {
+  const last = mountStart.value - 1;
+  if (last <= 0) return PAD_TOP;
+  return PAD_TOP + pf(last) * scale.value + last * PAGE_GAP;
+});
+/** 底部占位高度：挂载窗口之后所有页（高度 + 间距）+ PAD_BOTTOM。 */
+const bottomSpacerH = computed(() => {
+  const N = numPages.value;
+  const end = mountEnd.value;
+  if (end >= N) return PAD_BOTTOM;
+  const cnt = N - end;
+  return (pf(N) - pf(end)) * scale.value + cnt * PAGE_GAP + PAD_BOTTOM;
+});
+/** 需挂载的页码列表（模板 v-for）。 */
+const mountedPages = computed(() => {
+  const arr: number[] = [];
+  for (let i = mountStart.value; i <= mountEnd.value; i++) arr.push(i);
+  return arr;
+});
+
+/** 由当前滚动位置计算挂载窗口。`scroll` 可指定（加载恢复时用 keepScroll）。 */
+function updateWindow(scroll?: number) {
+  const N = numPages.value;
+  const c = container.value;
+  if (!N || !c) {
+    mountStart.value = 1;
+    mountEnd.value = N;
+    return;
+  }
+  const st = scroll ?? c.scrollTop;
+  const ch = c.clientHeight || 1;
+  const first = pageAtY(st);
+  const last = Math.min(N, pageAtY(st + ch));
+  mountStart.value = Math.max(1, first - PAGE_WINDOW);
+  mountEnd.value = Math.min(N, last + PAGE_WINDOW);
+}
 
 /** 取消某页在途渲染并等其完全结束（pdf.js 要求：cancel 后必须等 promise settle
  *  才能开始新的 render，否则两个任务仍会交错写同一个 2D context —— 页面画黑）。 */
@@ -102,6 +206,7 @@ async function doRenderPage(pageNum: number) {
   const canvas = pageCanvases[pageNum]!;
   const viewport = page.getViewport({ scale: scale.value });
   const dpr = window.devicePixelRatio || 1;
+  setHeight(pageNum, viewport.height / scale.value); // 记录 scale=1 页高（布局/占位用）
   canvas.width = Math.floor(viewport.width * dpr);
   canvas.height = Math.floor(viewport.height * dpr);
   canvas.style.width = `${viewport.width}px`;
@@ -117,6 +222,7 @@ async function doRenderPage(pageNum: number) {
     if (renderTaskByPage.get(pageNum) === task) {
       renderTaskByPage.delete(pageNum);
       renderedScale.set(pageNum, scale.value);
+      pagesRenderedThisLoad++; // 插桩
     }
   } catch {
     // 被取消或被取代：不留置 renderedScale（等待下次渲染）
@@ -134,40 +240,48 @@ function releasePage(pageNum: number) {
   renderedScale.delete(pageNum);
 }
 
-/** 渲染视口附近的所有页（含边距），远离视口的释放。 */
+/** 渲染挂载窗口内视口附近的所有页（含边距），远离视口的释放。 */
 function renderNearViewport() {
   if (!doc || !numPages.value || !container.value) return;
   const rect = container.value.getBoundingClientRect();
-  for (let n = 1; n <= numPages.value; n++) {
+  for (let n = mountStart.value; n <= mountEnd.value; n++) {
     const el = pageEls[n];
     if (!el) continue;
     const r = el.getBoundingClientRect();
     const near = r.bottom >= rect.top - RENDER_MARGIN && r.top <= rect.bottom + RENDER_MARGIN;
     if (near) {
       void renderPage(n);
-    } else if (renderedScale.has(n)) {
-      releasePage(n);
+    } else {
+      releasePage(n); // 含未渲染页（释放为幂等 no-op），确保重载后远处不残留旧内容
     }
   }
 }
 
-/** IntersectionObserver 版的按需渲染（滚动时触发）。 */
-let io: IntersectionObserver | null = null;
-function setupObserver() {
-  io?.disconnect();
-  io = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        const n = Number((e.target as HTMLElement).dataset.page);
-        if (e.isIntersecting) void renderPage(n);
-        else if (n > 0 && renderedScale.has(n)) releasePage(n);
-      }
-    },
-    { root: container.value, rootMargin: `${RENDER_MARGIN}px 0px` }
-  );
-  for (let n = 1; n <= numPages.value; n++) {
-    const el = pageEls[n];
-    if (el) io.observe(el);
+/** 预热各页 scale=1 高度（后台/分片，不阻塞首屏），使占位 & 窗口 & 滚动恢复尽早精确。 */
+async function warmHeights() {
+  if (!doc) return;
+  const N = numPages.value;
+  const myId = ++heightWarmId;
+  // 先当前窗口，再全量
+  const windowPages: number[] = [];
+  for (let n = mountStart.value; n <= mountEnd.value; n++) if (!pageH1[n]) windowPages.push(n);
+  for (const n of windowPages) {
+    if (myId !== heightWarmId) return;
+    await knowHeight(n);
+  }
+  for (let n = 1; n <= N; n++) {
+    if (myId !== heightWarmId) return;
+    if (!pageH1[n]) await knowHeight(n);
+  }
+}
+async function knowHeight(n: number) {
+  if (!doc || pageH1[n]) return;
+  try {
+    const page = await doc.getPage(n);
+    const vp = page.getViewport({ scale: 1 });
+    setHeight(n, vp.height);
+  } catch {
+    /* 单页获取失败不影响其他 */
   }
 }
 
@@ -178,7 +292,7 @@ function updateCurrentPage() {
   const mid = rect.top + rect.height / 2;
   let best = 1;
   let bestDist = Infinity;
-  for (let n = 1; n <= numPages.value; n++) {
+  for (let n = mountStart.value; n <= mountEnd.value; n++) {
     const el = pageEls[n];
     if (!el) continue;
     const r = el.getBoundingClientRect();
@@ -191,19 +305,19 @@ function updateCurrentPage() {
   currentPageIdx.value = best;
 }
 
-/** 设置缩放：0.5–4，重绘视口页并尽量保持滚动位置。 */
+/** 设置缩放：0.5–4，重绘视口页并尽量保持滚动位置。换缩放 → structuralEpoch++ 重建 canvas。 */
 async function setScale(next: number) {
   const s = Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(next * 100) / 100));
   if (Math.abs(s - scale.value) < 0.005) return;
   const keep = container.value?.scrollTop ?? 0;
   scale.value = s;
-  canvasEpoch.value++; // 重建 canvas：全新 2D context，排除残留状态
+  structuralEpoch.value++; // 缩放改变布局 → 重建 canvas（全新 2D context）
   renderedScale.clear();
   await cancelAllRenders();
   if (doc) {
+    updateWindow(keep);
     await nextTick();
     renderNearViewport();
-    await nextTick();
     if (container.value) container.value.scrollTop = keep;
     updateCurrentPage();
   }
@@ -225,15 +339,19 @@ function onWheel(e: WheelEvent) {
   void setScale(scale.value + (e.deltaY < 0 ? 0.25 : -0.25));
 }
 
-/** 加载 PDF；带滚动恢复。 */
+/** 加载 PDF；带滚动恢复。同文件内容重载复用 DOM/页高，换文档才重建。 */
 async function load() {
   const mySeq = ++loadSeq;
   const path = preview.pdfPath;
   if (!path) return;
   const keepScroll = scrollTop;
+  pagesRenderedThisLoad = 0;
   try {
+    const t0 = performance.now();
     const resp = await fetch(convertFileSrc(path));
     const data = await resp.arrayBuffer();
+    const tFetch = performance.now();
+    const byteLen = data.byteLength;
     loadingTask?.destroy().catch(() => {});
     // 中文 PDF 的 CMap 字体映射（缺失报 cMapUrl 错误，文字渲染失败）；
     // 必须绝对 URL：worker 内相对路径会基于 worker 脚本 URL（asset 协议）解析导致 404
@@ -243,27 +361,60 @@ async function load() {
       cMapPacked: true,
     });
     doc = await loadingTask.promise;
+    const tParse = performance.now();
     if (mySeq !== loadSeq) return; // 已被更新的加载取代
     // 切换文档：取消并等待所有在途渲染结束（旧 doc 的 RenderTask 不允许继续写画布）
     await cancelAllRenders();
-    canvasEpoch.value++; // 重建 canvas：全新 2D context，排除残留状态
+    const isSameFile = path === lastDocPath;
+    if (!isSameFile) {
+      // 换文档：重建 canvas DOM（全新 2D context）并清空页高缓存
+      structuralEpoch.value++;
+      lastDocPath = path;
+      pageH1.length = 0;
+      pageH1[0] = 0;
+      prefixH1.length = 0;
+      prefixH1[0] = 0;
+    }
     numPages.value = doc.numPages;
+    // 页高数组补足到新总页数（同文件重载保留已有页高 → 布局/滚动稳定）
+    if (pageH1.length < doc.numPages + 1) pageH1.length = doc.numPages + 1;
+    // 内容已变 → 全部标记为需重绘；DOM 复用与否由 structuralEpoch 决定
     renderedScale.clear();
     currentPageIdx.value = Math.min(currentPageIdx.value, numPages.value);
-    await nextTick(); // 等 v-for 页面节点挂载
-    // 首次加载自动“适应宽度”：默认 150% 固定值在窄面板里会溢出，
-    // 页面只能从左上角排起（无剩余空间时 margin:auto 无法居中）。之后保留用户手动缩放。
     if (!fittedOnce) {
       fittedOnce = true;
       await fitWidth();
     }
-    setupObserver();
+    updateWindow(keepScroll);
+    await nextTick(); // 等 v-for 按窗口挂载/卸载
     renderNearViewport();
+    // 后台预热高度（不阻塞首屏）
+    void warmHeights();
     if (container.value) container.value.scrollTop = keepScroll;
     updateCurrentPage();
     // 恢复后再渲染一次（字体加载可能改变布局）
     await nextTick();
     renderNearViewport();
+    const tDone = performance.now();
+    const timing = {
+      reload: mySeq,
+      file: path.split(/[\\/]/).pop() || path,
+      pages: numPages.value,
+      bytes: byteLen,
+      fetch: Math.round(tFetch - t0),
+      parse: Math.round(tParse - tFetch),
+      render: Math.round(tDone - tParse),
+      total: Math.round(tDone - t0),
+      pagesRendered: pagesRenderedThisLoad,
+    };
+    (window as any).__previewLastReload = timing; // 端到端测试读取
+    // 无 Rust 变更的观测通道：把耗时放进窗口标题，便于外部(如 pc-control list_windows)读取
+    document.title = `TeXPresso | reload ${timing.total}ms (fetch ${timing.fetch} parse ${timing.parse} render ${timing.render}) pages ${timing.pages} rendered ${timing.pagesRendered}`;
+    console.log(
+      `[preview] reload#${mySeq} ${timing.file} pages=${timing.pages} bytes=${timing.bytes} ` +
+        `fetch=${timing.fetch}ms parse=${timing.parse}ms render=${timing.render}ms ` +
+        `total=${timing.total}ms pagesRendered=${timing.pagesRendered}`
+    );
   } catch (e) {
     if (mySeq !== loadSeq) return; // 被取代的加载（destroy 引发 aborted）忽略
     console.error("PDF 加载失败：", e);
@@ -279,13 +430,25 @@ watch(
   }
 );
 
-// 高亮 overlay（SyncTeX 正向）：放到对应页的 wrap 内
+// 挂载窗口变化 → 更新 DOM 后按需渲染
+watch(mountedPages, async () => {
+  await nextTick();
+  renderNearViewport();
+});
+
+// 高亮 overlay（SyncTeX 正向）：放到对应页的 wrap 内。若目标页不在挂载窗口则临时扩展窗口。
 watch(
   () => preview.highlight,
   async (h) => {
     for (const box of pageHighlights) if (box) box.style.display = "none";
     if (!h || !doc) return;
     if (h.page < 1 || h.page > numPages.value) return;
+    if (h.page < mountStart.value || h.page > mountEnd.value) {
+      const mid = Math.max(1, Math.min(h.page, numPages.value));
+      mountStart.value = Math.max(1, mid - PAGE_WINDOW);
+      mountEnd.value = Math.min(numPages.value, mid + PAGE_WINDOW);
+      await nextTick();
+    }
     const box = pageHighlights[h.page];
     const canvas = pageCanvases[h.page];
     if (!box || !canvas) return;
@@ -338,6 +501,8 @@ async function onCanvasClick(pageNum: number, e: MouseEvent) {
 
 function onScroll(e: Event) {
   scrollTop = (e.target as HTMLElement).scrollTop;
+  updateWindow();
+  renderNearViewport();
   updateCurrentPage();
 }
 
@@ -351,12 +516,27 @@ function setHighlightEl(n: number, el: HTMLElement | null) {
   pageHighlights[n] = el;
 }
 
+/** 容器尺寸变化（面板/窗口缩放）：重算窗口并按需渲染。 */
+let resizeObs: ResizeObserver | null = null;
+function setupResizeObserver() {
+  resizeObs?.disconnect();
+  if (!container.value) return;
+  resizeObs = new ResizeObserver(() => {
+    updateWindow();
+    renderNearViewport();
+    updateCurrentPage();
+  });
+  resizeObs.observe(container.value);
+}
+
 onMounted(() => {
+  setupResizeObserver();
   if (preview.pdfPath) load();
 });
 
 onBeforeUnmount(() => {
-  io?.disconnect();
+  resizeObs?.disconnect();
+  resizeObs = null;
   loadingTask?.destroy().catch(() => {});
   loadingTask = null;
   doc = null;
@@ -390,9 +570,11 @@ onBeforeUnmount(() => {
         <span class="empty-hint">写好 main.tex，点「编译」就能提前看到成品</span>
       </div>
       <div class="pages" v-if="numPages > 0">
+        <!-- 顶部占位：撑住窗口之前页面的高度（滚动条稳定） -->
+        <div class="spacer" :style="{ height: topSpacerH + 'px' }" />
         <div
-          v-for="n in numPages"
-          :key="`${n}-${canvasEpoch}`"
+          v-for="n in mountedPages"
+          :key="`${n}-${structuralEpoch}`"
           class="page-wrap"
           :data-page="n"
           :ref="(el) => setPageEl(n, el as HTMLElement)"
@@ -400,6 +582,8 @@ onBeforeUnmount(() => {
           <canvas :ref="(el) => setCanvasEl(n, el as HTMLCanvasElement)" @click="onCanvasClick(n, $event)" />
           <div class="highlight" :ref="(el) => setHighlightEl(n, el as HTMLElement)" />
         </div>
+        <!-- 底部占位：撑住窗口之后页面的高度 -->
+        <div class="spacer" :style="{ height: bottomSpacerH + 'px' }" />
       </div>
     </div>
   </div>
@@ -457,7 +641,9 @@ onBeforeUnmount(() => {
 .empty-icon { font-size: 38px; display: block; }
 .empty-title { display: block; margin-top: 12px; font-size: 14px; font-weight: 700; color: var(--ink-dim); }
 .empty-hint { display: block; margin-top: 6px; font-size: 12px; }
-.pages { padding: 18px 16px 40px; }
+/* 垂直 padding 移入上/下占位（虚拟化），仅保留水平 padding */
+.pages { padding: 0 16px; }
+.spacer { width: 100%; }
 .page-wrap {
   position: relative;
   margin: 0 auto 18px;

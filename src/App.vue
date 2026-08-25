@@ -32,6 +32,17 @@ let unsubscribe: (() => void) | null = null;
 onMounted(async () => {
   unsubscribe = subscribeEvents();
   await settings.init();
+  // 测试/开发钩子：设置 VITE_TEXPRESSO_PROJECT 目录则自动打开项目，绕过原生目录弹窗
+  // （原生弹窗 WebDriver 无法驱动），便于端到端测试。生产不设置，行为不变。
+  const envProject = import.meta.env.VITE_TEXPRESSO_PROJECT as string | undefined;
+  if (envProject) {
+    try {
+      const info = await project.openProject(envProject);
+      if (info.root_file) await editor.openFile(info.root_file);
+    } catch (e) {
+      console.error("自动打开项目失败：", e);
+    }
+  }
 });
 
 onBeforeUnmount(() => unsubscribe?.());
