@@ -48,7 +48,7 @@ export const useProjectStore = defineStore("project", () => {
 
 /** 归一化文件路径：折叠连续斜杠、剥 `.`、合并 `..`（浏览器环境手写，不依赖 node:path）。
  *  磁盘绝对路径保留 `E:/...`；根绝对路径保留 `/...`。 */
-function normalizePath(p: string): string {
+export function normalizePath(p: string): string {
   const abs = p.startsWith("/") || /^[A-Za-z]:\//.test(p);
   const out: string[] = [];
   for (const seg of p.split("/")) {

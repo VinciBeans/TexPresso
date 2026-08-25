@@ -172,8 +172,8 @@ Ctrl+点击 → `synctex_forward` → { page, x, y } → PDF 高亮；PDF 点击
 ## 8. 工程基建
 
 - **Rust 测试**：cargo test——scheduler 用 fake CompileRunner 单测（队列合并/超时/重试/终止语义）；insta 快照——log_parser 用真实 latexmk 日志固化为用例
-- **前端**：零自动化测试（MVP 后补 vitest + @vue/test-utils）
-- **CI（GitHub Actions，MVP 前即搭）**：cargo test + `vue-tsc --noEmit` + Windows runner `tauri build` 冒烟（顺带验证 NSIS 打包链路，覆盖 ADR-3）
+- **前端**：vitest（+ @vue/test-utils）——stores（project 路径归一化、editor 自保存过滤/冲突、useAutoSave 防抖）单测，`npm run test`；JSON 组件测后续补
+- **CI（GitHub Actions，MVP 前即搭）**：cargo test + `vue-tsc --noEmit` + `npm run test`（前端单测）+ Windows runner `tauri build` 冒烟（顺带验证 NSIS 打包链路，覆盖 ADR-3）
 
 ## 9. 与上层设计的关系
 

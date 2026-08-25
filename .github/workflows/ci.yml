@@ -33,6 +33,11 @@ jobs:
       - name: Frontend type-check & build
         run: npm run build
 
+      # 前端单测（vitest）：stores 路径归一化、editor 自保存过滤/冲突、useAutoSave 防抖。
+      # architecture.md §8「MVP 后补 vitest + @vue/test-utils」。
+      - name: Frontend unit tests
+        run: npm run test
+
       # core 纯逻辑（调度器合并/超时/重试/终止、日志解析快照、设置合并、根文件探测）。
       # 无 Tauri/无 GUI 依赖，Linux 可跑；不运行 #[ignore] 的真实 TeX 集成测试。
       - name: Core tests

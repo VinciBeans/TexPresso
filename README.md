@@ -59,7 +59,7 @@ npm run tauri dev  # 启动开发（vite + Tauri，首次会编译 Rust ~数分�
 ## 🧪 测试与质量
 
 - `cargo test`（core + src-tauri）：调度器语义、日志解析快照、设置合并、路径校验（含 Windows verbatim 探测）
-- 前端：`npm run build` 类型检查；手动验收清单见 [docs/design.md](./docs/design.md)（打开→编译→报错→修改→恢复→预览全链路）
+- 前端：`npm run test`（vitest 单测：stores 路径归一化 / editor 自保存过滤与冲突 / useAutoSave 防抖）+ `npm run build` 类型检查；手动验收清单见 [docs/design.md](./docs/design.md)（打开→编译→报错→修改→恢复→预览全链路）
 
 ## 📚 文档索引
 
