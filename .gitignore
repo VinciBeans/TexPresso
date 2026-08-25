@@ -51,6 +51,9 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 
+# ============ Agent 工作手册（局部开发约定，勿上传） ============
+AGENTS.md
+
 # ============ 本地测试工程（test_file/projects，含编译产物 tmp/、*.pdf，勿上传） ============
 test_file/projects/
 
