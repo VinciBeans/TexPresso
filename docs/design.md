@@ -74,6 +74,8 @@
 
 **A/B 优化后真实窗口复测（2026-08-25，tauri server MCP 驱动）**：`npm run tauri dev` + `VITE_TEXPRESSO_PROJECT=000test` 自动开项目 → 点「编译」→ `main.pdf`(3 页/108KB) 重载。**像素级视觉确认通过**（标题页/目录/正文正常，无黑屏/文字反转——此前受限点已解决）。**插桩修正**：把 `render` 从 setup 时间改为等挂载窗口渲染链落盘后的真实 canvas 绘制耗时（原 `pagesRendered` 恒 0）。**实测**：同文件复用 `fetch≈9–10ms / parse≈30ms / render≈59ms / total≈98–100ms / pagesRendered=2`；首次换文档 `render≈77ms / total≈112ms / pagesRendered=3`。**render 占总耗时 ~59%，仍为 PDF 重载开销主因**（一致结论）；3 页小文档总耗时 ~100ms 远低于延迟预算（先前 `render≈320ms/total≈400–450ms` 是 12 页文档数值，非同比）。
 
+**受控 A/B 对比（2026-08-25，同一 31 页 `bigtest`）**：重构前全量挂载 31 canvas，重构后虚拟化只挂 ~7 canvas（**DOM 节点 ~4.4× 减少**）；同文件复用路径 `render 49→21–28ms / total 89→62–69ms / pagesRendered 9→2`。DOM 减量为无歧义收益；render/total 下降含「渲染页数变少」因素，但同文档总耗时仍明显下降。`bigtest/` 为基准工程（未提交）。
+
 ## 预览
 
 - **内嵌 PDF 面板**（pdf.js）：编译成功后自动刷新、保持滚动位置（v1 必须）
