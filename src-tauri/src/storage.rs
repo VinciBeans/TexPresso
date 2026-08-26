@@ -8,7 +8,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use texpresso_core::project::FileSystem;
-use texpresso_core::settings::{merge, ProjectOverrides, Settings};
+use texpresso_core::settings::{merge, validate, validate_overrides, ProjectOverrides, Settings};
 use tracing::error;
 
 pub struct SettingsStorage {
@@ -36,11 +36,21 @@ impl SettingsStorage {
         h.finish()
     }
 
-    /// 读取全局设置；缺失 → 默认值并落盘；损坏 → 默认值（错误记录，不阻塞启动）。
+    /// 读取全局设置；缺失 → 默认值并落盘；损坏 → 默认值（错误记录，不阻塞启动）；
+    /// 解析成功但范围非法（如手工/陈旧 timeout_secs=1）→ 回退默认，避免越界值被直接使用。
     pub async fn load_global(&self, fs: &dyn FileSystem) -> Settings {
         match fs.read_to_string(&self.global_path).await {
             Ok(text) => match serde_json::from_str::<Settings>(&text) {
-                Ok(s) => s,
+                Ok(s) => {
+                    if validate(&s).is_ok() {
+                        s
+                    } else {
+                        error!("全局设置范围非法，使用默认值");
+                        let d = Settings::default();
+                        self.save_global(&d).await;
+                        d
+                    }
+                }
                 Err(e) => {
                     error!("全局设置损坏，使用默认值：{e}");
                     let d = Settings::default();
@@ -76,14 +86,21 @@ impl SettingsStorage {
             .insert(self.global_path.clone(), hash);
     }
 
-    /// 读取项目覆盖；缺失 → 空覆盖（全继承全局）。
+    /// 读取项目覆盖；缺失 → 空覆盖（全继承全局）；损坏或范围非法 → 忽略覆盖。
     pub async fn load_overrides(&self, fs: &dyn FileSystem, project_root: &Path) -> ProjectOverrides {
         let path = project_overrides_path(project_root);
         match fs.read_to_string(&path).await {
-            Ok(text) => serde_json::from_str::<ProjectOverrides>(&text).unwrap_or_else(|e| {
-                error!("项目设置损坏，忽略覆盖：{e}");
-                ProjectOverrides::default()
-            }),
+            Ok(text) => match serde_json::from_str::<ProjectOverrides>(&text) {
+                Ok(o) if validate_overrides(&o).is_ok() => o,
+                Ok(_) => {
+                    error!("项目设置范围非法，忽略覆盖：{}", path.display());
+                    ProjectOverrides::default()
+                }
+                Err(e) => {
+                    error!("项目设置损坏，忽略覆盖：{e}");
+                    ProjectOverrides::default()
+                }
+            },
             Err(_) => ProjectOverrides::default(),
         }
     }
@@ -193,6 +210,25 @@ mod tests {
         let loaded = s.load_global(&TokioFs).await;
         assert_eq!(loaded, Settings::default());
         assert!(path.exists(), "缺失时应落盘默认值");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn load_global_out_of_range_falls_back_to_default() {
+        // 手工/陈旧越界值（debounce 50<100、timeout 1<5）不应被使用，回退默认并落盘
+        let dir = std::env::temp_dir().join(format!("texpresso-storage-range-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        std::fs::write(
+            &path,
+            r#"{"schema_version":1,"compile":{"mode":"continuous","debounce_ms":50,"timeout_secs":1,"engine":"xelatex"},"root_file":null}"#,
+        )
+        .unwrap();
+        let s = SettingsStorage::new(path.clone());
+        let loaded = s.load_global(&TokioFs).await;
+        assert_eq!(loaded, Settings::default(), "越界应回退默认");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("\"timeout_secs\": 1"), "回退后应落盘默认值");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -53,7 +53,10 @@ impl CompileRunner for LatexmkRunner {
             .arg(latexmk_input(&req.root_file, &req.project_root))
             .current_dir(&req.project_root)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stderr(std::process::Stdio::null())
+            // 进程孤儿防护：若编译 future 被丢弃（应用退出/任务取消），随 future 一并杀掉 latexmk。
+            // 避免子进程残留、持续写 tmp/ 或占用 PDF 锁。（树杀仍由 kill_tree 负责，这里是兜底。）
+            .kill_on_drop(true);
 
         let mut child = match cmd.spawn() {
             Ok(c) => c,
@@ -83,12 +86,21 @@ impl CompileRunner for LatexmkRunner {
             status = child.wait() => match status {
                 Ok(s) if s.success() => {
                     // 成功：tmp/<stem>.pdf → 项目根（design.md 产物位置）
+                    // 原子拷贝：先写临时文件再 rename，失败时旧 PDF 保留（不被截断/损坏）。
                     let pdf_src = tmp_dir.join(format!("{stem}.pdf"));
-                    match tokio::fs::copy(&pdf_src, &pdf_dst).await {
+                    let pdf_tmp = pdf_dst.with_extension("pdf.tmp");
+                    let copy = async {
+                        tokio::fs::copy(&pdf_src, &pdf_tmp).await?;
+                        tokio::fs::rename(&pdf_tmp, &pdf_dst).await
+                    };
+                    match copy.await {
                         Ok(_) => CompileOutcome::Success { pdf_path: pdf_dst },
-                        Err(e) => CompileOutcome::IoError {
-                            message: format!("PDF 拷贝失败（{} → {}）：{e}", pdf_src.display(), pdf_dst.display()),
-                        },
+                        Err(e) => {
+                            let _ = tokio::fs::remove_file(&pdf_tmp).await;
+                            CompileOutcome::IoError {
+                                message: format!("PDF 拷贝失败（{} → {}）：{e}", pdf_src.display(), pdf_dst.display()),
+                            }
+                        }
                     }
                 }
                 Ok(_) => {

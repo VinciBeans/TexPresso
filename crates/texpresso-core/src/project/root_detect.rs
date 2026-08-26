@@ -22,9 +22,10 @@ pub fn extract_includes(content: &str) -> Vec<String> {
 }
 
 /// 提取 `\documentclass[...]{...}` 声明（含可选参数形式）。
+/// TeX 允许 `\documentclass` 与 `{` 之间有空白（`\documentclass {article}` 合法），故用 `\s*` 放宽。
 pub fn extract_documentclass(content: &str) -> Option<String> {
     static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"\\documentclass(\[[^\]]*\])?\{([^}]+)\}").expect("documentclass regex")
+        Regex::new(r"\\documentclass\s*(\[[^\]]*\])?\s*\{([^}]+)\}").expect("documentclass regex")
     });
     RE.captures(content).map(|c| c[2].to_string())
 }
@@ -118,6 +119,21 @@ mod tests {
         );
         assert_eq!(extract_documentclass("\\usepackage{foo}"), None);
         assert_eq!(extract_documentclass("no class here"), None);
+    }
+
+    #[test]
+    fn extract_documentclass_allows_space_before_brace() {
+        // TeX 允许 \documentclass 与 { 之间有空白（原正则不匹配 → 根探测返回 None）
+        assert_eq!(
+            extract_documentclass("\\documentclass {article}").as_deref(),
+            Some("article")
+        );
+        assert_eq!(
+            extract_documentclass("\\documentclass [12pt] {ctexart}").as_deref(),
+            Some("ctexart")
+        );
+        // 仍不匹配非 documentclass
+        assert_eq!(extract_documentclass("\\usepackage {foo}"), None);
     }
 
     fn fs_with(files: &[(&str, &str)]) -> crate::testutil::FakeFS {
