@@ -61,6 +61,13 @@ const renderChainByPage = new Map<number, Promise<void>>();
  * 同文件内容重载不 +1 → 复用现有 DOM（doRenderPage 每次 canvas.width= 即重置 context）。
  */
 const structuralEpoch = ref(0);
+/**
+ * 布局版本号：每次 pageH1 变化（setHeight 记录/更新页高）时 +1。pageH1/prefixH1 是普通数组，
+ * 并非响应式；所有依赖页高的 computed（上/下占位、.page-wrap 高度）引用本 ref 以获得响应式，
+ * 使 warmHeights/逐页渲染填入页高时，布局与滚动条能即时重算（否则缩小后释放页高度流失、
+ * scrollHeight 变短、滚动条拖不到底）。
+ */
+const layoutRev = ref(0);
 /** 上次加载的 PDF 路径：判断“同文件内容重载”（复用 DOM/页高） vs “换文档”（重建）。 */
 let lastDocPath = "";
 /** 本次 reload 实际完成绘制的页数（插桩统计：诊断重载渲染成本）。 */
@@ -93,6 +100,7 @@ function setHeight(n: number, h1: number) {
   if (pageH1[n] === h1) return;
   pageH1[n] = h1;
   recomputePrefix();
+  layoutRev.value++; // 页高变化 → 占位 .page-wrap 高度随响应式重算
 }
 /** 第 n 页顶部相对内容区顶部（含顶部留白）的偏移（当前 scale）。 */
 function pageTop(n: number): number {
@@ -117,18 +125,27 @@ function pageAtY(y: number): number {
 }
 /** 顶部占位高度：PAD_TOP + 挂载窗口之前所有页（高度 + 间距）。 */
 const topSpacerH = computed(() => {
+  void layoutRev.value; // pageH1/prefixH1 变化时重算（布局由页高驱动）
   const last = mountStart.value - 1;
   if (last <= 0) return PAD_TOP;
   return PAD_TOP + pf(last) * scale.value + last * PAGE_GAP;
 });
 /** 底部占位高度：挂载窗口之后所有页（高度 + 间距）+ PAD_BOTTOM。 */
 const bottomSpacerH = computed(() => {
+  void layoutRev.value;
   const N = numPages.value;
   const end = mountEnd.value;
   if (end >= N) return PAD_BOTTOM;
   const cnt = N - end;
   return (pf(N) - pf(end)) * scale.value + cnt * PAGE_GAP + PAD_BOTTOM;
 });
+/** .page-wrap 保留高度：= pageH1[n] × scale。即使 canvas 已释放（releasePage 置 0×0）或
+ *  re-mount 后尚未重绘，也保留真实页面高度，避免在窗口内的页高度流失 → scrollHeight 变短、
+ *  滚动条拖不到底、renderNearViewport 因 0 高矩形误判 near 而把近页 release（PDF 消失）。 */
+function pageWrapHeight(n: number): number {
+  void layoutRev.value; // 响应式：页高变化时随之重算
+  return Math.round((pageH1[n] || 0) * scale.value);
+}
 /** 需挂载的页码列表（模板 v-for）。 */
 const mountedPages = computed(() => {
   const arr: number[] = [];
@@ -632,6 +649,7 @@ onBeforeUnmount(() => {
           :key="`${n}-${structuralEpoch}`"
           class="page-wrap"
           :data-page="n"
+          :style="{ height: pageWrapHeight(n) + 'px' }"
           :ref="(el) => setPageEl(n, el as HTMLElement)"
         >
           <canvas :ref="(el) => setCanvasEl(n, el as HTMLCanvasElement)" @click="onCanvasClick(n, $event)" />
@@ -725,6 +743,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 6px 28px rgba(43, 36, 56, 0.18), 0 1px 4px rgba(43, 36, 56, 0.12);
   outline: 1px solid var(--line);
 }
+/* canvas 块级、充满 .page-wrap 保留高度；避免内联基线缝隙（releasePage 置 0×0 时仅影响宽高，布局仍由 wrap 高度驱动） */
+.page-wrap canvas { display: block; }
 .highlight {
   display: none;
   position: absolute;
