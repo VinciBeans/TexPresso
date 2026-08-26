@@ -30,8 +30,8 @@ const autoSave = useAutoSave();
 const cursorLine = ref(0);
 const cursorCol = ref(0);
 
-/** 底部报告面板是否折叠（折叠时仅剩细条，回收竖向空间给主编辑/预览区）。 */
-const bottomCollapsed = ref(false);
+/** 底部报告面板是否折叠（默认折叠，回收竖向空间给主编辑/预览区；点报告头展开）。 */
+const bottomCollapsed = ref(true);
 /** 折叠头部摘要：编译状态 + 错误数。 */
 const bottomStatus = computed(() => {
   if (compile.phase === "running") return { text: "排版中…", tone: "run" };
@@ -159,7 +159,15 @@ const settingsOpen = ref(false);
     <div class="main">
       <SplitPane direction="vertical" :initial="0.15">
         <template #primary>
-          <FileTree />
+          <!-- 左栏：文件树 上 | 大纲 下（上下分布，改善观感） -->
+          <SplitPane direction="horizontal" :initial="0.55">
+            <template #primary>
+              <FileTree />
+            </template>
+            <template #secondary>
+              <OutlinePane />
+            </template>
+          </SplitPane>
         </template>
         <template #secondary>
           <!-- 编辑器 | PDF 预览：左右排布（vertical = 竖向分隔条），1:1 -->
@@ -196,16 +204,9 @@ const settingsOpen = ref(false);
         <span class="spacer" />
         <span class="toggle-hint">{{ bottomCollapsed ? "展开" : "收起" }}</span>
       </button>
-      <!-- 内容（折叠时隐藏）：错误列表 | 大纲 左右并排 -->
+      <!-- 内容（折叠时隐藏）：错误列表（大纲已移至左侧栏） -->
       <div class="bottom-content" v-show="!bottomCollapsed">
-        <SplitPane direction="vertical" :initial="0.7">
-          <template #primary>
-            <div class="error-area"><ErrorList /></div>
-          </template>
-          <template #secondary>
-            <OutlinePane />
-          </template>
-        </SplitPane>
+        <div class="error-area"><ErrorList /></div>
       </div>
     </div>
 
