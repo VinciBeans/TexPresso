@@ -37,10 +37,25 @@ const bottomStatus = computed(() => {
 });
 
 let unsubscribe: (() => void) | null = null;
+let removeKeydown: (() => void) | null = null;
 
 onMounted(async () => {
   unsubscribe = subscribeEvents();
-  await settings.init();
+  // 设置加载失败不应阻塞应用初始化（否则会成未处理 rejection 并跳过环境自动打开）。
+  try {
+    await settings.init();
+  } catch (e) {
+    console.error("加载设置失败：", e);
+  }
+  // Ctrl+S / Cmd+S：立即保存全部脏文件（on_save 模式的「保存触发」；连续模式也立即落盘一次）。
+  const onKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      autoSave.flush().catch((err) => console.error("保存失败：", err));
+    }
+  };
+  window.addEventListener("keydown", onKeyDown);
+  removeKeydown = () => window.removeEventListener("keydown", onKeyDown);
   // 测试/开发钩子：设置 VITE_TEXPRESSO_PROJECT 目录则自动打开项目，绕过原生目录弹窗
   // （原生弹窗 WebDriver 无法驱动），便于端到端测试。生产不设置，行为不变。
   const envProject = import.meta.env.VITE_TEXPRESSO_PROJECT as string | undefined;
@@ -54,7 +69,10 @@ onMounted(async () => {
   }
 });
 
-onBeforeUnmount(() => unsubscribe?.());
+onBeforeUnmount(() => {
+  unsubscribe?.();
+  removeKeydown?.();
+});
 
 /** 打开项目（dialog 选文件夹）。 */
 async function chooseProject() {
@@ -74,11 +92,15 @@ async function chooseProject() {
 }
 
 function onEditorChange(_path: string) {
-  autoSave.schedule();
+  // 连续模式：编辑触发防抖自动保存；on_save 模式不自动写盘（由 Ctrl+S / 点「编译」/ 关标签触发）。
+  if (settings.settings?.compile.mode === "continuous") autoSave.schedule();
 }
 
 async function manualCompile() {
   try {
+    // 先把未落盘的脏文件写盘（on_save 模式下不自动保存，点「编译」需先落盘），
+    // 后端 watch 会响应写盘触发编译；compile_now 再强制入队（合并队列吸收重复）。
+    await autoSave.flush();
     await ipc.compileNow();
   } catch (e) {
     console.error("手动编译失败：", e);
