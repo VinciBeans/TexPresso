@@ -8,9 +8,11 @@ import TabBar from "./components/TabBar.vue";
 import EditorPane from "./components/EditorPane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
 import ErrorList from "./components/ErrorList.vue";
+import OutlinePane from "./components/OutlinePane.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { useProjectStore } from "./stores/project";
 import { useEditorStore } from "./stores/editor";
+import { useOutlineStore } from "./stores/outline";
 import { useSettingsStore } from "./stores/settings";
 import { useCompileStore } from "./stores/compile";
 import { useAutoSave } from "./composables/useAutoSave";
@@ -22,6 +24,7 @@ const project = useProjectStore();
 const editor = useEditorStore();
 const settings = useSettingsStore();
 const compile = useCompileStore();
+const outline = useOutlineStore();
 const autoSave = useAutoSave();
 
 const cursorLine = ref(0);
@@ -63,6 +66,7 @@ onMounted(async () => {
     try {
       const info = await project.openProject(envProject);
       if (info.root_file) await editor.openFile(info.root_file);
+      await outline.refresh();
     } catch (e) {
       console.error("自动打开项目失败：", e);
     }
@@ -86,6 +90,7 @@ async function chooseProject() {
       // 多候选/零候选：v1 提示手动选择根文件
       console.warn("未探测到唯一根文件，请在设置中手动指定 root_file");
     }
+    await outline.refresh();
   } catch (e) {
     console.error("打开项目失败：", e);
   }
@@ -198,7 +203,7 @@ const settingsOpen = ref(false);
             <div class="error-area"><ErrorList /></div>
           </template>
           <template #secondary>
-            <div class="placeholder">大纲（后置）</div>
+            <OutlinePane />
           </template>
         </SplitPane>
       </div>

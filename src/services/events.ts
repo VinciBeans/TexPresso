@@ -4,6 +4,7 @@
 import { events } from "../bindings";
 import { useCompileStore } from "../stores/compile";
 import { useEditorStore } from "../stores/editor";
+import { useOutlineStore } from "../stores/outline";
 import { usePreviewStore } from "../stores/preview";
 import { useProjectStore } from "../stores/project";
 import { useSettingsStore } from "../stores/settings";
@@ -15,6 +16,8 @@ export function subscribeEvents(): () => void {
     events.compileStatus.listen((e) => {
       const dto = e.payload as any;
       useCompileStore().setStatus(dto.phase, dto.kind);
+      // 编译成功 = 文档结构已确立 → 重建大纲（source 结构变化后保持同步）
+      if (dto.phase === "success") void useOutlineStore().refresh();
     }),
     events.errorsUpdated.listen((e) => {
       useCompileStore().setErrors(e.payload as any);
@@ -29,6 +32,8 @@ export function subscribeEvents(): () => void {
       const structural: boolean = p.structural ?? true; // 缺省按结构变化处理（保守）
       useEditorStore().onFilesChanged(paths);
       useProjectStore().refreshTreeDebounced(structural);
+      // 结构变化（增/删/重命名）→ 文件集合变了，重建大纲
+      if (structural) void useOutlineStore().refresh();
     }),
     events.settingsChanged.listen((e) => {
       useSettingsStore().setSettings(e.payload as any);
