@@ -136,21 +136,25 @@ impl CompileRunner for LatexmkRunner {
 /// Windows：`taskkill /T /F /PID`（Child::kill 只杀直接子进程，latexmk 的子进程会存活）。
 /// Unix：先试进程组（-pid），失败再试直接 kill（best-effort，与 LaTeX Workshop 相同的已知局限）。
 fn kill_tree(pid: u32) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/T", "/F", "/PID", &pid.to_string()])
-            .status();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let group = std::process::Command::new("kill")
-            .args(["-9", &format!("-{pid}")])
-            .status();
-        if group.map(|s| !s.success()).unwrap_or(true) {
-            let _ = std::process::Command::new("kill").arg("-9").arg(pid.to_string()).status();
+    // 阻塞的进程/进程组调用移到阻塞线程池，避免卡住 async 执行器（超时/取消路径的热路径）。
+    // 结果 best-effort，丢弃 JoinHandle（仅作后台树杀，不等待）。
+    tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .status();
         }
-    }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let group = std::process::Command::new("kill")
+                .args(["-9", &format!("-{pid}")])
+                .status();
+            if group.map(|s| !s.success()).unwrap_or(true) {
+                let _ = std::process::Command::new("kill").arg("-9").arg(pid.to_string()).status();
+            }
+        }
+    });
 }
 #[cfg(test)]
 mod tests {
