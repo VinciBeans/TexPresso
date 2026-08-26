@@ -17,7 +17,7 @@ export function subscribeEvents(): () => void {
       const dto = e.payload as any;
       useCompileStore().setStatus(dto.phase, dto.kind);
       // 编译成功 = 文档结构已确立 → 重建大纲（source 结构变化后保持同步）
-      if (dto.phase === "success") void useOutlineStore().refresh();
+      if (dto.phase === "success") useOutlineStore().refresh().catch(() => {});
     }),
     events.errorsUpdated.listen((e) => {
       useCompileStore().setErrors(e.payload as any);
@@ -33,7 +33,7 @@ export function subscribeEvents(): () => void {
       useEditorStore().onFilesChanged(paths);
       useProjectStore().refreshTreeDebounced(structural);
       // 结构变化（增/删/重命名）→ 文件集合变了，重建大纲
-      if (structural) void useOutlineStore().refresh();
+      if (structural) useOutlineStore().refresh().catch(() => {});
     }),
     events.settingsChanged.listen((e) => {
       useSettingsStore().setSettings(e.payload as any);

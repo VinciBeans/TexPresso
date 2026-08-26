@@ -8,7 +8,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use texpresso_core::project::FileSystem;
-use texpresso_core::settings::{merge, validate, validate_overrides, ProjectOverrides, Settings};
+use texpresso_core::settings::{merge, sanitize_overrides, validate, ProjectOverrides, Settings};
 use tracing::error;
 
 pub struct SettingsStorage {
@@ -86,15 +86,15 @@ impl SettingsStorage {
             .insert(self.global_path.clone(), hash);
     }
 
-    /// 读取项目覆盖；缺失 → 空覆盖（全继承全局）；损坏或范围非法 → 忽略覆盖。
+    /// 读取项目覆盖；缺失 → 空覆盖（全继承全局）；损坏 → 忽略覆盖；
+    /// 个别字段非法（越界/.. root_file）→ 逐字段清除（sanitize），保留其它合法覆盖（避免连带丢弃）。
     pub async fn load_overrides(&self, fs: &dyn FileSystem, project_root: &Path) -> ProjectOverrides {
         let path = project_overrides_path(project_root);
         match fs.read_to_string(&path).await {
             Ok(text) => match serde_json::from_str::<ProjectOverrides>(&text) {
-                Ok(o) if validate_overrides(&o).is_ok() => o,
-                Ok(_) => {
-                    error!("项目设置范围非法，忽略覆盖：{}", path.display());
-                    ProjectOverrides::default()
+                Ok(mut o) => {
+                    sanitize_overrides(&mut o);
+                    o
                 }
                 Err(e) => {
                     error!("项目设置损坏，忽略覆盖：{e}");

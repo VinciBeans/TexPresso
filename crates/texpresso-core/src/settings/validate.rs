@@ -47,6 +47,28 @@ fn validate_root_file_form(root_file: &Path) -> Option<String> {
     None
 }
 
+/// 逐字段清洗非法覆盖值：越界字段置 None（回退全局），合法字段保留。
+/// 用于加载（load_overrides 容忍手改/陈旧值）；update_settings 仍用 validate_overrides 拒绝整批非法输入。
+pub fn sanitize_overrides(o: &mut ProjectOverrides) {
+    if let Some(rf) = &o.root_file {
+        if validate_root_file_form(rf).is_some() {
+            o.root_file = None;
+        }
+    }
+    if let Some(c) = &mut o.compile {
+        if let Some(t) = c.timeout_secs {
+            if !TIMEOUT_SECS_RANGE.contains(&t) {
+                c.timeout_secs = None;
+            }
+        }
+        if let Some(d) = c.debounce_ms {
+            if !DEBOUNCE_MS_RANGE.contains(&d) {
+                c.debounce_ms = None;
+            }
+        }
+    }
+}
+
 /// 校验项目覆盖（只查 Some 的键）。
 pub fn validate_overrides(o: &ProjectOverrides) -> Result<(), Vec<String>> {
     let mut errs = Vec::new();
@@ -130,6 +152,29 @@ mod tests {
 
         let o2 = ProjectOverrides::default();
         assert!(validate_overrides(&o2).is_ok());
+    }
+
+    #[test]
+    fn sanitize_overrides_clears_invalid_keeps_valid() {
+        let mut o = ProjectOverrides {
+            root_file: Some("../outside.tex".into()),
+            compile: Some(crate::settings::model::CompileOverrides {
+                timeout_secs: Some(9999),
+                debounce_ms: Some(150),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        sanitize_overrides(&mut o);
+        assert_eq!(o.root_file, None, "非法 root_file 应清空（回退探测）");
+        let c = o.compile.unwrap();
+        assert_eq!(c.timeout_secs, None, "越界 timeout 置 None（回退全局）");
+        assert_eq!(c.debounce_ms, Some(150), "合法 debounce 保留");
+
+        // 全默认 → 不变
+        let mut d = ProjectOverrides::default();
+        sanitize_overrides(&mut d);
+        assert_eq!(d, ProjectOverrides::default());
     }
 
     #[test]

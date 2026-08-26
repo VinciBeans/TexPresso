@@ -47,7 +47,17 @@
 3. 大纲细节：`OutlinePane :key` 改稳定 key；`resolveInclude` 先判存在；可跳过 verbatim 环境。
 4. SplitPane 补显式 `.split-pane.vertical` 规则（既有 Low）。
 
-## 4. 强项
+## 4. 修复状态（按优先级）
+
+- **M1 大纲并发守卫 + .catch()**：已修——`outline.refresh()` 加 `loadSeq` supersede（旧刷新完成即弃），`events.ts` 两处 `void refresh()` 改 `.catch(() => {})`。
+- **M2 编译成功全量重扫**：已评估——超驰守卫避免并发重扫互相覆盖/重复写；全量重扫由编译频率约束（必要：结构可能随编译变化），暂不加节流，成本可通过后续命中「结构命令所在文件」细化。
+- **P2 load_overrides 逐字段清洗**：已修——core 增 `sanitize_overrides`（越界/非法根文件置 None 回退全局、保留合法覆盖），`load_overrides` 改为此（不再整包丢弃）。
+- **P3 大纲细节**：已修——稳定 key（`file:line`）、`resolveInclude` 根相对优先、跳过 `verbatim` 环境。
+- **P4 SplitPane.vertical**：已修——补显式 `.split-pane.vertical { flex-direction: row; }`。
+
+验证：`vue-tsc --noEmit` / `npm run test`（28/4）/ `cargo test -p texpresso-core` / `cargo check -p texpresso --tests` 全绿。
+
+## 5. 强项
 
 - 修复均以"代码 + 回归测试 + 文档"打包提交，每步验证后落地；无散装半成品。
 - abort 竞态守卫、synctex 分块解析、嵌套 root_file、SD 设置校验等修复点都有针对性单测，且未破坏既有 93 项测试（现 97）。

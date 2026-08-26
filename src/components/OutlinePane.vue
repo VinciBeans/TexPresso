@@ -57,8 +57,8 @@ function onClick(node: OutlineNode) {
         <span>{{ "编译后自动生成文档结构" }}</span>
       </div>
       <div
-        v-for="(row, i) in rows"
-        :key="i"
+        v-for="row in rows"
+        :key="`${row.node.file}:${row.node.line}`"
         class="item"
         :class="{ active: isActive(row.node) }"
         :style="{ paddingLeft: 10 + row.depth * 14 + 'px' }"

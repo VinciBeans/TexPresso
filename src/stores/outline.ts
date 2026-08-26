@@ -49,6 +49,8 @@ const INCLUDE_RE = /\\(include|input)(\*)?\s*\{([^}]*)\}/;
 export const useOutlineStore = defineStore("outline", () => {
   const items = ref<OutlineNode[]>([]);
   const root = ref<string | null>(null);
+  /** 刷新序号：并发 refresh 时只有最新一次写结果，旧刷新完成即放弃（防陈旧覆盖）。 */
+  let refreshSeq = 0;
 
   const isEmpty = computed(() => items.value.length === 0);
 
@@ -71,17 +73,18 @@ export const useOutlineStore = defineStore("outline", () => {
     return normalizePath(`${a.replace(/\\/g, "/")}/${b.replace(/^\.\//, "")}`);
   }
 
-  /** \include/\input 参数 → 候选绝对 .tex 路径（先当前文件目录，再项目根）。 */
+  /** \include/\input 参数 → 候选绝对 .tex 路径（TeX 的 \input 相对**项目根**解析，故根相对优先；
+   *  再回退当前文件目录，覆盖个别打包/相对路径写法）。 */
   function resolveInclude(raw: string, fromFile: string, projectRoot: string): string[] {
     let rel = raw.replace(/\\/g, "/");
     if (rel.startsWith("./")) rel = rel.slice(2);
     if (!/\.[A-Za-z0-9]+$/.test(rel)) rel += ".tex";
     const root = projectRoot.replace(/\\/g, "/");
     const cands: string[] = [];
-    const fileRel = joinPath(dirOf(fromFile), rel);
     const rootRel = joinPath(root, rel);
-    if (fileRel) cands.push(fileRel);
-    if (rootRel && !cands.includes(rootRel)) cands.push(rootRel);
+    if (rootRel) cands.push(rootRel);
+    const fileRel = joinPath(dirOf(fromFile), rel);
+    if (fileRel && !cands.includes(fileRel)) cands.push(fileRel);
     return cands;
   }
 
@@ -93,10 +96,21 @@ export const useOutlineStore = defineStore("outline", () => {
     const content = await readContent(key);
     if (content == null) return;
     const lines = content.split(/\r?\n/);
+    let inVerbatim = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trimStart();
-      if (trimmed.startsWith("%")) continue; // 注释行
+      if (trimmed.startsWith("%")) continue; // 只跳过行首注释（启发式，ADR-0009 同类局限）
+      // 跳过 verbatim 环境：其中的 \section/\include 是字面量，不应生成大纲项/跟随
+      if (/\\begin\{verbatim\*?\}/.test(trimmed)) {
+        inVerbatim = true;
+        continue;
+      }
+      if (/\\end\{verbatim\*?\}/.test(trimmed)) {
+        inVerbatim = false;
+        continue;
+      }
+      if (inVerbatim) continue;
       const inc = trimmed.match(INCLUDE_RE);
       if (inc) {
         for (const cand of resolveInclude(inc[3], key, ctx.root)) {
@@ -143,6 +157,7 @@ export const useOutlineStore = defineStore("outline", () => {
 
   /** 重建大纲（异步，读文件）。根文件存在则按 include 图；否则解析全部 .tex（排序）。 */
   async function refresh() {
+    const mySeq = ++refreshSeq;
     const project = useProjectStore();
     if (!project.project) {
       items.value = [];
@@ -161,6 +176,9 @@ export const useOutlineStore = defineStore("outline", () => {
         .sort();
       for (const p of texFiles) await parseFile(p, ctx);
     }
+    // 并发守卫：期间若又触发了一次刷新（编译成功/结构变化连发），丢弃本次陈旧结果。
+    // 也避免了两次 refresh 交错写 items 造成的覆盖顺序不确定性。
+    if (mySeq !== refreshSeq) return;
     items.value = buildTree(flat);
     root.value = rootFile;
   }

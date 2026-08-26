@@ -55,6 +55,8 @@ function onPointerUp() {
 
 <style scoped>
 .split-pane { display: flex; width: 100%; height: 100%; overflow: hidden; }
+/* direction 指分隔条朝向：vertical=左右排布（竖向分隔条），horizontal=上下排布（横向分隔条） */
+.split-pane.vertical { flex-direction: row; }
 .split-pane.horizontal { flex-direction: column; }
 .divider {
   position: relative;
