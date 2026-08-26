@@ -146,7 +146,8 @@ const settingsOpen = ref(false);
     </div>
 
     <div class="bottom">
-      <SplitPane direction="horizontal" :initial="0.7">
+      <!-- 错误列表 | 大纲：左右并排（不竖向堆叠，减少竖向占用） -->
+      <SplitPane direction="vertical" :initial="0.7">
         <template #primary>
           <div class="error-area"><ErrorList /></div>
         </template>
@@ -288,7 +289,7 @@ body {
 
 /* ---- 主体 ---- */
 .main { flex: 1 1 auto; min-height: 0; }
-.bottom { flex: 0 0 172px; min-height: 0; border-top: 1.5px solid var(--line); }
+.bottom { flex: 0 0 140px; min-height: 0; border-top: 1.5px solid var(--line); }
 .editor-area { display: flex; flex-direction: column; height: 100%; background: var(--card); }
 .editor-area > :last-child { flex: 1; min-height: 0; }
 .error-area { height: 100%; }
