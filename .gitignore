@@ -12,6 +12,10 @@ dist-ssr/
 coverage/
 *.local
 
+# pdf.js 资源（构建/开发时由 scripts/copy-pdf-worker.mjs 从 node_modules/pdfjs-dist 自动拷贝，
+# 属重生成依赖拷贝，勿入库；dev/build 会先自动生成）
+public/pdfjs/
+
 # Rust / Tauri（src-tauri/.gitignore 另有 /target/ 与 /gen/schemas）
 src-tauri/target/
 src-tauri/gen/
@@ -64,3 +68,9 @@ test_file/e2e/drivers/
 # ============ Logo 工具临时产物（临时目录 + 预览页，勿上传） ============
 *.tmpdir/
 __logo_preview*.html
+
+# ============ 真机验证截图（agent 在仓库根目录另存的 PNG/JPG，勿上传） ============
+/zoom-*.png
+/zoom-*.jpg
+/screenshot*.png
+/screenshot*.jpg
