@@ -1,6 +1,6 @@
 <!-- 应用壳（modules.md §3）：三栏布局 + 底部错误列表 + 状态栏，自研 splitter。 -->
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import SplitPane from "./components/SplitPane.vue";
 import FileTree from "./components/FileTree.vue";
@@ -26,6 +26,15 @@ const autoSave = useAutoSave();
 
 const cursorLine = ref(0);
 const cursorCol = ref(0);
+
+/** 底部报告面板是否折叠（折叠时仅剩细条，回收竖向空间给主编辑/预览区）。 */
+const bottomCollapsed = ref(false);
+/** 折叠头部摘要：编译状态 + 错误数。 */
+const bottomStatus = computed(() => {
+  if (compile.phase === "running") return { text: "排版中…", tone: "run" };
+  if (compile.hasError) return { text: `${compile.errors.length} 个错误`, tone: "err" };
+  return { text: "就绪", tone: "ok" };
+});
 
 let unsubscribe: (() => void) | null = null;
 
@@ -145,16 +154,32 @@ const settingsOpen = ref(false);
       </SplitPane>
     </div>
 
-    <div class="bottom">
-      <!-- 错误列表 | 大纲：左右并排（不竖向堆叠，减少竖向占用） -->
-      <SplitPane direction="vertical" :initial="0.7">
-        <template #primary>
-          <div class="error-area"><ErrorList /></div>
-        </template>
-        <template #secondary>
-          <div class="placeholder">大纲（后置）</div>
-        </template>
-      </SplitPane>
+    <div class="bottom" :class="{ collapsed: bottomCollapsed }">
+      <!-- 折叠头：状态摘要 + 折叠/展开 -->
+      <button
+        class="bottom-toggle"
+        :title="bottomCollapsed ? '展开报告' : '收起报告'"
+        @click="bottomCollapsed = !bottomCollapsed"
+      >
+        <span class="caret">{{ bottomCollapsed ? "▸" : "▾" }}</span>
+        <span class="toggle-label">报告</span>
+        <span class="toggle-status" :class="bottomStatus.tone">
+          <span class="dot" />{{ bottomStatus.text }}
+        </span>
+        <span class="spacer" />
+        <span class="toggle-hint">{{ bottomCollapsed ? "展开" : "收起" }}</span>
+      </button>
+      <!-- 内容（折叠时隐藏）：错误列表 | 大纲 左右并排 -->
+      <div class="bottom-content" v-show="!bottomCollapsed">
+        <SplitPane direction="vertical" :initial="0.7">
+          <template #primary>
+            <div class="error-area"><ErrorList /></div>
+          </template>
+          <template #secondary>
+            <div class="placeholder">大纲（后置）</div>
+          </template>
+        </SplitPane>
+      </div>
     </div>
 
     <StatusBar :cursor-line="cursorLine" :cursor-col="cursorCol" />
@@ -289,7 +314,34 @@ body {
 
 /* ---- 主体 ---- */
 .main { flex: 1 1 auto; min-height: 0; }
-.bottom { flex: 0 0 140px; min-height: 0; border-top: 1.5px solid var(--line); }
+.bottom {
+  flex: 0 0 140px; min-height: 0; border-top: 1.5px solid var(--line);
+  display: flex; flex-direction: column;
+}
+.bottom.collapsed { flex: 0 0 30px; }
+.bottom-content { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.bottom-toggle {
+  display: flex; align-items: center; gap: 8px;
+  flex: 0 0 auto; height: 30px; padding: 0 12px;
+  background: var(--card); border: none; border-bottom: 1.5px solid var(--line-soft);
+  color: var(--ink-dim); font-size: 11.5px; font-weight: 700; letter-spacing: 1px;
+  cursor: pointer; text-align: left; width: 100%;
+}
+.bottom-toggle:hover { background: var(--card-2); }
+.bottom-toggle .caret { font-size: 11px; color: var(--ink-faint); }
+.bottom-toggle .toggle-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0;
+}
+.bottom-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
+.bottom-toggle .toggle-status.ok { color: var(--mint); }
+.bottom-toggle .toggle-status.err { color: #e85f52; }
+.bottom-toggle .toggle-status.err .dot { background: var(--coral); }
+.bottom-toggle .toggle-status.run { color: var(--ink-dim); }
+.bottom-toggle .toggle-status.run .dot { background: var(--mango); animation: bottom-pulse 1.1s ease-in-out infinite; }
+.bottom-toggle .spacer { flex: 1 1 auto; }
+.bottom-toggle .toggle-hint { color: var(--ink-faint); font-size: 11px; font-weight: 500; letter-spacing: 0.5px; }
+@keyframes bottom-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 .editor-area { display: flex; flex-direction: column; height: 100%; background: var(--card); }
 .editor-area > :last-child { flex: 1; min-height: 0; }
 .error-area { height: 100%; }
