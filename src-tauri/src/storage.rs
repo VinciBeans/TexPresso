@@ -140,3 +140,59 @@ async fn atomic_write(path: &Path, content: &str) -> std::io::Result<()> {
     tokio::fs::rename(&tmp, path).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs_impl::TokioFs;
+    use texpresso_core::settings::model::CompileOverrides;
+
+    #[test]
+    fn effective_merges_overrides() {
+        let g = Settings::default();
+        let mut o = ProjectOverrides::default();
+        o.compile = Some(CompileOverrides {
+            timeout_secs: Some(60),
+            ..Default::default()
+        });
+        let s = SettingsStorage::effective(&g, &o);
+        assert_eq!(s.compile.timeout_secs, 60);
+        // 未覆盖字段继承全局
+        assert_eq!(s.compile.debounce_ms, g.compile.debounce_ms);
+    }
+
+    #[test]
+    fn project_overrides_path_is_dot_texpresso_settings() {
+        assert_eq!(
+            project_overrides_path(Path::new(r"C:\proj")),
+            PathBuf::from(r"C:\proj\.texpresso\settings.json")
+        );
+    }
+
+    #[tokio::test]
+    async fn save_then_self_write_filter_consumes() {
+        // 覆盖：写盘（原子写）→ 自写盘 hash 过滤消费一次 → 再次/不同内容为 false
+        let dir = std::env::temp_dir().join(format!("texpresso-storage-it-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        let s = SettingsStorage::new(path.clone());
+        s.save_global(&Settings::default()).await;
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(s.is_self_write(&path, &text), "首次应命中自写盘 hash");
+        assert!(!s.is_self_write(&path, &text), "hash 应被消费一次");
+        assert!(!s.is_self_write(&path, "other"), "不同内容不应命中");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn load_global_missing_returns_default_and_persists() {
+        let dir = std::env::temp_dir().join(format!("texpresso-storage-load-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        let s = SettingsStorage::new(path.clone());
+        let loaded = s.load_global(&TokioFs).await;
+        assert_eq!(loaded, Settings::default());
+        assert!(path.exists(), "缺失时应落盘默认值");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

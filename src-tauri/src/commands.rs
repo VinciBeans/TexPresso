@@ -409,3 +409,40 @@ pub async fn update_settings(
     debug!("设置已更新：{:?}", effective.compile);
     Ok(effective)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project(root: &str, root_file: Option<&str>) -> ProjectState {
+        ProjectState {
+            root: PathBuf::from(root),
+            root_file: root_file.map(PathBuf::from),
+        }
+    }
+
+    #[test]
+    fn pdf_path_uses_root_stem_at_project_root() {
+        assert_eq!(
+            pdf_path_for_root(&project(r"C:\proj", Some(r"C:\proj\main.tex"))),
+            PathBuf::from(r"C:\proj\main.pdf")
+        );
+    }
+
+    #[test]
+    fn pdf_path_falls_back_to_main_when_no_root() {
+        assert_eq!(
+            pdf_path_for_root(&project(r"C:\proj", None)),
+            PathBuf::from(r"C:\proj\main.pdf")
+        );
+    }
+
+    #[test]
+    fn pdf_path_flattens_nested_root_to_project_root() {
+        // 产物约定：PDF 打到项目根（design.md）。嵌套根文件（css/thesis.tex）也平铺到项目根。
+        assert_eq!(
+            pdf_path_for_root(&project(r"C:\proj", Some(r"C:\proj\css\thesis.tex"))),
+            PathBuf::from(r"C:\proj\thesis.pdf")
+        );
+    }
+}

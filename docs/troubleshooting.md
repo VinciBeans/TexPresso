@@ -49,3 +49,14 @@
 - **e2e 操作要点（2026-08-25 完整 e2e 实测）**：① **pc-control 打字前先 `Ctrl+Space` 关闭中文输入法**——否则 IME 会截走按键转义（实测 `% E2E_MARKER` 被 IME 吞掉/乱插）；② **状态栏「外部修改：文件名」可点击**——点击即从磁盘重载该文件（`acceptExternal`），用于外部修改冲突恢复（v1 无独立「重载」按钮，此 span 即入口）；③ 原生目录对话框流程：`Ctrl+L` 聚焦地址栏 → 粘贴路径 → Enter → 再补 `Enter`（连按确认）即可选中并关闭（实测成功打开 multifile 工程）。
 
 **注意**：`test_file/e2e/drivers/`（msedgedriver 二进制）与 `test_file/e2e/node_modules/` 已 gitignore。
+
+## Rust 单测：`cargo test -p texpresso`（src-tauri）在 Windows 启动即失败（2026-08）
+
+**现象**：`cargo test -p texpresso --lib` 编译成功，但测试二进制**加载即退出**——`STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)`，任何测试都未运行。
+
+**根因**：`texpresso_lib` 链接了 tauri/wry 的 `webview2-com`（延迟加载 `WebView2Loader.dll`）。`cargo test` 的测试二进制不做 GUI 初始化，WebView2 运行时在纯测试进程里不可解析，导致进程映像加载失败。**与业务代码无关**；`cargo check -p texpresso --tests` 能正常通过（测试代码编译无误）。
+
+**处置**：
+- 核心 crate 单测走 `cargo test -p texpresso-core`（无 Tauri 依赖，运行正常，CI 用这个验证纯逻辑）。
+- src-tauri 接线层的纯逻辑单测（`fs_impl::strip_verbatim`、`runner::root_stem/latexmk_input`、`watch::should_process/is_structural_event/normalize_event_paths`、`storage::effective/is_self_write/project_overrides_path`、`commands::pdf_path_for_root`）**可编译、逻辑已验证**，但本机无法直接 `cargo test` 执行；在 WebView2 运行时可用/可解析 `WebView2Loader.dll` 的 Windows 环境（如真机宿主）再运行。
+- 尝试把 `webview2-com-sys-*/out/{arch}/WebView2Loader.dll` 拷到 `target/debug` 并加入 PATH **仍失败**（延迟加载在进程映像加载阶段即报错），非 PATH 问题。

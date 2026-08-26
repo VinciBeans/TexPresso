@@ -265,3 +265,57 @@ fn broadcast_files_changed(paths: &[PathBuf], state: &WatchState, structural: bo
     let paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
     let _ = FilesChangedEvent(FilesChanged { paths, structural }).emit(&state.app);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{AccessKind, CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode};
+    use notify::EventKind;
+
+    fn ev(kind: EventKind, paths: &[&str]) -> notify::Event {
+        let mut e = notify::Event::new(kind);
+        for p in paths {
+            e = e.add_path(Path::new(p).to_path_buf());
+        }
+        e
+    }
+
+    #[test]
+    fn should_process_skips_access() {
+        assert!(!should_process(&ev(EventKind::Access(AccessKind::Read), &[])));
+        assert!(should_process(&ev(EventKind::Create(CreateKind::File), &["a.tex"])));
+    }
+
+    #[test]
+    fn structural_flag_matches_kind() {
+        // 增/删/重命名 → true（文件树重建）；内容修改 → false（跳过重建）
+        assert!(is_structural_event(&ev(EventKind::Create(CreateKind::File), &["a"])));
+        assert!(is_structural_event(&ev(EventKind::Remove(RemoveKind::File), &["a"])));
+        assert!(is_structural_event(&ev(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            &["a"]
+        )));
+        assert!(!is_structural_event(&ev(
+            EventKind::Modify(ModifyKind::Data(DataChange::Any)),
+            &["a"]
+        )));
+    }
+
+    #[test]
+    fn normalize_rename_both_takes_to_path() {
+        let e = ev(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            &["from.tex", "to.tex"],
+        );
+        assert_eq!(normalize_event_paths(&e), vec![PathBuf::from("to.tex")]);
+    }
+
+    #[test]
+    fn normalize_keeps_all_paths_for_other_kinds() {
+        let e = ev(EventKind::Create(CreateKind::File), &["a.tex", "b.tex"]);
+        assert_eq!(
+            normalize_event_paths(&e),
+            vec![PathBuf::from("a.tex"), PathBuf::from("b.tex")]
+        );
+    }
+}

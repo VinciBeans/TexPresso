@@ -339,4 +339,30 @@ mod tests {
         let outcome = runner.compile(req(&project), cancel).await;
         assert_eq!(outcome, CompileOutcome::Aborted);
     }
+
+    #[test]
+    fn root_stem_variants() {
+        assert_eq!(root_stem(Path::new(r"C:\proj\main.tex")), "main");
+        assert_eq!(root_stem(Path::new("css/thesis.tex")), "thesis");
+        assert_eq!(root_stem(Path::new("main")), "main"); // 无扩展名回退
+    }
+
+    #[test]
+    fn latexmk_input_keeps_nested_relative_path() {
+        // H2 回归：嵌套根文件必须用相对项目的完整路径，而非仅 stem（否则 latexmk 在项目根下找不到文件）
+        let root = Path::new(r"C:\proj");
+        assert_eq!(
+            latexmk_input(Path::new(r"C:\proj\css\thesis.tex"), root),
+            "css/thesis.tex"
+        );
+        assert_eq!(
+            latexmk_input(Path::new(r"C:\proj\main.tex"), root),
+            "main.tex"
+        );
+        // 不在项目根下 → 回退到完整路径（统一正斜杠）
+        assert_eq!(
+            latexmk_input(Path::new(r"D:\other\a.tex"), root),
+            "D:/other/a.tex"
+        );
+    }
 }

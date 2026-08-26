@@ -42,3 +42,38 @@ impl FileSystem for TokioFs {
         tokio::fs::read_to_string(path).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_verbatim_drive_prefix() {
+        // Windows canonicalize 返回 \\?\ 前缀；对外暴露前必须剥掉，否则前端 resolvePath 判定失败
+        assert_eq!(
+            strip_verbatim(Path::new(r"\\?\C:\proj\main.tex")),
+            Path::new(r"C:\proj\main.tex")
+        );
+    }
+
+    #[test]
+    fn strips_verbatim_unc_prefix() {
+        // \\?\UNC\server\share\... → \\server\share\...
+        assert_eq!(
+            strip_verbatim(Path::new(r"\\?\UNC\server\share\a.tex")),
+            Path::new(r"\\server\share\a.tex")
+        );
+    }
+
+    #[test]
+    fn keeps_normal_paths_untouched() {
+        assert_eq!(
+            strip_verbatim(Path::new(r"C:\proj\main.tex")),
+            Path::new(r"C:\proj\main.tex")
+        );
+        assert_eq!(
+            strip_verbatim(Path::new("/proj/main.tex")),
+            Path::new("/proj/main.tex")
+        );
+    }
+}
