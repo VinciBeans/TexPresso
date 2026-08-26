@@ -16,6 +16,8 @@ const { forward } = useSyncTex();
 
 const host = ref<HTMLElement | null>(null);
 let monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null;
+/** Monaco 事件订阅，逐条显式释放（不依赖 editor.dispose 级联，防残留监听）。 */
+const monacoSubscriptions: monaco.IDisposable[] = [];
 
 /**
  * model uri.toString() → 存储路径（反查表）。
@@ -52,25 +54,29 @@ onMounted(() => {
   });
 
   // 内容变更 → 脏标记 + 缓冲（自动保存的数据源）
-  monacoEditor.onDidChangeModelContent(() => {
-    const model = monacoEditor!.getModel();
-    const path = storePathOf(model);
-    if (!path || !model) return;
-    editor.markDirty(path, model.getValue());
-    emit("change", path);
-  });
-
-  monacoEditor.onDidChangeCursorPosition(reportCursor);
-
-  // Ctrl+点击 → SyncTeX 正向（modules.md §5.3）
-  monacoEditor.onMouseDown((e) => {
-    if (e.event.ctrlKey && e.target.position) {
-      const pos = e.target.position;
+  monacoSubscriptions.push(
+    monacoEditor.onDidChangeModelContent(() => {
       const model = monacoEditor!.getModel();
       const path = storePathOf(model);
-      if (model && path) forward(path, pos.lineNumber, pos.column);
-    }
-  });
+      if (!path || !model) return;
+      editor.markDirty(path, model.getValue());
+      emit("change", path);
+    }),
+  );
+
+  monacoSubscriptions.push(monacoEditor.onDidChangeCursorPosition(reportCursor));
+
+  // Ctrl+点击 → SyncTeX 正向（modules.md §5.3）
+  monacoSubscriptions.push(
+    monacoEditor.onMouseDown((e) => {
+      if (e.event.ctrlKey && e.target.position) {
+        const pos = e.target.position;
+        const model = monacoEditor!.getModel();
+        const path = storePathOf(model);
+        if (model && path) forward(path, pos.lineNumber, pos.column);
+      }
+    }),
+  );
 });
 
 // 打开文件切换：get-or-create model
@@ -145,6 +151,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  for (const sub of monacoSubscriptions) sub.dispose();
+  monacoSubscriptions.length = 0;
   monacoEditor?.dispose();
   monacoEditor = null;
 });

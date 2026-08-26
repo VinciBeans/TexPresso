@@ -38,6 +38,15 @@ describe("editorStore", () => {
     expect(editor.activePath).toBe(MAIN);
   });
 
+  it("openFile：并发调用不重复开标签（去重竞态回归：await 前 some 判断不够）", async () => {
+    const editor = useEditorStore();
+    // 两个 openFile 在 await 前都通过了初始 some 判断；靠 await 后复检去重
+    const p1 = editor.openFile(MAIN);
+    const p2 = editor.openFile(MAIN);
+    await Promise.all([p1, p2]);
+    expect(editor.tabs.map((t) => t.path)).toEqual([MAIN]);
+  });
+
   it("onFilesChanged：已打开且不脏 → 静默重载 buffer", async () => {
     const editor = useEditorStore();
     await editor.openFile(MAIN);

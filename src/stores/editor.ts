@@ -28,8 +28,12 @@ export const useEditorStore = defineStore("editor", () => {
     const path = project.resolvePath(rawPath);
     if (!tabs.value.some((t) => t.path === path)) {
       const content = await ipc.readFile(path);
-      tabs.value.push({ path, name: path.split(/[/\\]/).pop() ?? path });
-      buffers.value.set(path, content);
+      // 去重需在 await 后复检：并发的 openFile（如树节点快速双击）都在 await 前通过了 some 判断，
+      // 此处复检避免重复开标签（复检后的 push 是同步的，不会再有并发窗口）。
+      if (!tabs.value.some((t) => t.path === path)) {
+        tabs.value.push({ path, name: path.split(/[/\\]/).pop() ?? path });
+        buffers.value.set(path, content);
+      }
     }
     activePath.value = path;
     if (revealLine) {
@@ -96,7 +100,13 @@ export const useEditorStore = defineStore("editor", () => {
       }
       try {
         const content = await ipc.readFile(path);
-        buffers.value.set(path, content);
+        // 复检：await 期间用户可能已输入（markDirty 重写 buffer + dirty），此时磁盘快照会覆盖最新输入。
+        // 脏则保留本地缓冲并发冲突标记。
+        if (!dirty.value.has(path)) {
+          buffers.value.set(path, content);
+        } else {
+          externalConflict.value.add(path);
+        }
       } catch {
         // 文件可能被删除
       }

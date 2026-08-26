@@ -40,6 +40,8 @@ const currentPageIdx = ref(1);
 let scrollTop = 0;
 /** 加载序号：并发 pdf-updated 时旧加载被取代（destroy 引发的 aborted 忽略）。 */
 let loadSeq = 0;
+/** 组件是否已卸载：在途 load/渲染/点击不再写全局或操作 doc。 */
+let unmounted = false;
 /** 是否已做过首次“适应宽度”：只有首次加载自动 fit，之后保留用户手动缩放。 */
 let fittedOnce = false;
 
@@ -416,7 +418,7 @@ async function load() {
     });
     doc = await loadingTask.promise;
     const tParse = performance.now();
-    if (mySeq !== loadSeq) return; // 已被更新的加载取代
+    if (unmounted || mySeq !== loadSeq) return; // 组件已卸载或已被更新的加载取代
     // 切换文档：取消并等待所有在途渲染结束（旧 doc 的 RenderTask 不允许继续写画布）
     await cancelAllRenders();
     const isSameFile = path === lastDocPath;
@@ -452,6 +454,7 @@ async function load() {
     // 等本次挂载窗口的渲染链全部落盘（真实 canvas 绘制耗时）。
     // 原实现 render=setup 时间、pagesRendered 恒为 0，无法反映渲染瓶颈（modules.md §12）。
     await Promise.allSettled([...renderChainByPage.values()]);
+    if (unmounted) return; // 卸载后不再写全局/标题
     const tDone = performance.now();
     const timing = {
       reload: mySeq,
@@ -473,7 +476,7 @@ async function load() {
         `total=${timing.total}ms pagesRendered=${timing.pagesRendered}`
     );
   } catch (e) {
-    if (mySeq !== loadSeq) return; // 被取代的加载（destroy 引发 aborted）忽略
+    if (unmounted || mySeq !== loadSeq) return; // 已卸载或被取代的加载忽略
     console.error("PDF 加载失败：", e);
   }
 }
@@ -548,15 +551,20 @@ async function onCanvasClick(pageNum: number, e: MouseEvent) {
   if (!doc) return;
   const canvas = pageCanvases[pageNum];
   if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const page = await doc.getPage(pageNum);
-  const viewport = page.getViewport({ scale: scale.value });
-  const clickPt = viewport.convertToPdfPoint(x, y);
-  // pdf.js 坐标底部起算 → synctex 顶部起算（翻转）
-  const vp1 = page.getViewport({ scale: 1 });
-  await inverse(pageNum, clickPt[0], vp1.height - clickPt[1]);
+  // 卸载期间点击：getPage/inverse 可能拒绝或操作已销毁的 doc → 吞掉并退出（不产生未处理 rejection）。
+  try {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const page = await doc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: scale.value });
+    const clickPt = viewport.convertToPdfPoint(x, y);
+    // pdf.js 坐标底部起算 → synctex 顶部起算（翻转）
+    const vp1 = page.getViewport({ scale: 1 });
+    await inverse(pageNum, clickPt[0], vp1.height - clickPt[1]);
+  } catch (err) {
+    if (!unmounted) console.error("SyncTeX 反向定位失败：", err);
+  }
 }
 
 function onScroll(e: Event) {
@@ -595,8 +603,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  unmounted = true;
   resizeObs?.disconnect();
   resizeObs = null;
+  // 取消在途渲染任务（避免卸载后仍向已卸载的 canvas 写像素），并显式销毁加载任务
+  cancelAllRenders().catch(() => {});
   loadingTask?.destroy().catch(() => {});
   loadingTask = null;
   doc = null;

@@ -20,6 +20,11 @@ export const useCompileStore = defineStore("compile", () => {
     if (p === "failed") {
       hasError.value = true;
     }
+    if (p === "success") {
+      // 成功态清空错误：若无 running 前置（直接 success），上一次失败的错误会残留到「就绪」。
+      errors.value = [];
+      hasError.value = false;
+    }
   }
 
   function setErrors(list: ErrorEntry[]) {
