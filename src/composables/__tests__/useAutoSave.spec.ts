@@ -80,4 +80,36 @@ describe("useAutoSave", () => {
     expect(vi.mocked(ipc.saveAll)).toHaveBeenCalledTimes(1);
     expect(editor.dirty.has(MAIN)).toBe(false);
   });
+
+  it("保存期间内容变化：不清脏，重排保存最新内容（陈旧保存竞态回归）", async () => {
+    const editor = useEditorStore();
+    editor.markDirty(MAIN, "v1");
+    const auto = withSetup(() => useAutoSave());
+
+    // 让本次 saveAll 挂起，直到测试手动放行（模拟磁盘写盘期间用户仍在输入）
+    let resolve!: () => void;
+    vi.mocked(ipc.saveAll).mockImplementationOnce(
+      () => new Promise<null>((res) => { resolve = () => res(null); }),
+    );
+
+    auto.schedule();
+    await vi.advanceTimersByTimeAsync(500); // 触发 run → saveAll 挂起
+    expect(vi.mocked(ipc.saveAll)).toHaveBeenCalledTimes(1);
+
+    // 保存期间用户继续输入 → buffer 变 v2，dirty 重新加入
+    editor.markDirty(MAIN, "v2");
+
+    // 放行本次保存（写盘的仍是 v1；保存成功，返回值不影响判定）
+    resolve!();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // 关键断言：buffer(v2) ≠ 已保存内容(v1)，不应清脏
+    expect(editor.dirty.has(MAIN)).toBe(true);
+
+    // 且重排了下次保存：防抖后再次 saveAll，写入最新 v2
+    await vi.advanceTimersByTimeAsync(500);
+    expect(vi.mocked(ipc.saveAll)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ipc.saveAll)).toHaveBeenLastCalledWith([{ path: MAIN, content: "v2" }]);
+    expect(editor.dirty.has(MAIN)).toBe(false);
+  });
 });

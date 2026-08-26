@@ -95,15 +95,43 @@ pub async fn open_project(folder: String, state: State<'_, AppState>) -> Result<
     }
 
     // 项目设置：覆盖 + 合并（modules.md §6）
+    // global 必须读**纯全局**（磁盘 settings.json），不能读 state.settings——后者可能已是
+    // 上一个项目合并后的 effective，否则打开第二个项目会继承第一个项目的覆盖值（root_file/mode）。
+    // 此处与 update_settings 的 load_global 保持一致（见本文件 update_settings）。
     let overrides = state.storage.load_overrides(state.fs.as_ref(), &canonical).await;
-    let global = state.settings.read().await.clone();
+    let global = state.storage.load_global(state.fs.as_ref()).await;
     let settings = SettingsStorage::effective(&global, &overrides);
     *state.overrides.write().await = overrides;
     *state.settings.write().await = settings.clone();
 
     // 根文件：手动覆盖优先；否则探测（modules.md §5.4）
     let root_file = match settings.root_file.clone() {
-        Some(override_path) => Some(strip_verbatim(&canonical.join(override_path))),
+        Some(override_path) => {
+            // 路径安全（D8）：root_file 覆盖解析后必须落在项目根内且为 .tex。
+            // 仅 `starts_with` 对含 `..` 的路径不够（词法匹配），须 canonicalize 解析后再判。
+            let joined = canonical.join(&override_path);
+            let resolved = tokio::fs::canonicalize(&joined).await.map_err(|_| {
+                CmdError::Invalid(format!("root_file 不存在或不可访问：{}", override_path.display()))
+            })?;
+            if !resolved.starts_with(&canonical) {
+                return Err(CmdError::Invalid(format!(
+                    "root_file 在项目外：{}",
+                    override_path.display()
+                )));
+            }
+            let is_tex = resolved
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("tex"))
+                .unwrap_or(false);
+            if !is_tex {
+                return Err(CmdError::Invalid(format!(
+                    "root_file 不是 .tex 文件：{}",
+                    override_path.display()
+                )));
+            }
+            Some(strip_verbatim(&resolved))
+        }
         None => {
             let files = collect_tex_files(state.fs.as_ref(), &canonical)
                 .await

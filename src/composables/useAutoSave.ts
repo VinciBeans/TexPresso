@@ -24,11 +24,18 @@ export function useAutoSave() {
     const files = paths
       .map((p) => ({ path: p, content: editor.buffers.get(p) ?? "" }))
       .filter((f) => editor.buffers.has(f.path));
+    if (files.length === 0) return;
     // 乐观记录（竞态修复：files-changed 可能先于 saveAll 返回到达）
     editor.markSaving(files.map((f) => f.path));
     try {
       await ipc.saveAll(files);
-      editor.markSaved(files.map((f) => f.path));
+      // 陈旧保存竞态：保存期间用户可能继续输入，buffer 已变为新内容。
+      // 只有「缓冲区仍等于已保存内容」的路径才清脏；否则保持 dirty（markDirty 已重新加入），
+      // 并重排下次保存，避免关闭时 flush() 因 dirty 为空而丢失最新输入。
+      // lastSaved 已由 markSaving 设置，自保存过滤（files-changed 自我写判定）不受影响。
+      const clean = files.filter((f) => (editor.buffers.get(f.path) ?? "") === f.content);
+      editor.markSaved(clean.map((f) => f.path));
+      if (clean.length < files.length) schedule();
     } catch (e) {
       editor.rollbackSaving(files.map((f) => f.path));
       console.error("自动保存失败：", e);

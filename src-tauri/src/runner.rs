@@ -25,6 +25,18 @@ fn root_stem(root_file: &Path) -> String {
         .unwrap_or_else(|| "main".to_string())
 }
 
+/// latexmk 输入参数：相对项目根的完整路径（不能用 stem——嵌套根文件如 `css/thesis.tex`
+/// 只取 stem 会跑成 `latexmk thesis.tex`，在项目根下不存在）。统一用正斜杠，避免 Windows
+/// 反斜杠在 latexmk 内被当作转义。latexmk jobname 取输入文件名 basename，故产物仍是
+/// `tmp/<stem>.pdf`，与 `pdf_dst`/`pdf_src` 的 stem 计算保持一致。
+fn latexmk_input(root_file: &Path, project_root: &Path) -> String {
+    root_file
+        .strip_prefix(project_root)
+        .unwrap_or(root_file)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
 #[async_trait]
 impl CompileRunner for LatexmkRunner {
     async fn compile(&self, req: CompileRequest, cancel: CancellationToken) -> CompileOutcome {
@@ -38,7 +50,7 @@ impl CompileRunner for LatexmkRunner {
             .arg(format!("-outdir={OUT_DIR}"))
             .arg("-synctex=1")
             .arg("-interaction=nonstopmode")
-            .arg(format!("{stem}.tex"))
+            .arg(latexmk_input(&req.root_file, &req.project_root))
             .current_dir(&req.project_root)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
