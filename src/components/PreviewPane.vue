@@ -184,8 +184,9 @@ async function toPdfPoint(page: pdfjsLib.PDFPageProxy, x: number, yTop: number):
   return [x, vp1.height - yTop];
 }
 
-/** 渲染指定页：入队到该页串行链（严格 FIFO），避免同 canvas 并发渲染。 */
-function renderPage(pageNum: number) {
+/** 渲染指定页：入队到该页串行链（严格 FIFO），避免同 canvas 并发渲染。
+ *  返回该页渲染链，供 caller await（如 SyncTeX 跳转需在渲染完成、页高落定后再定位）。 */
+function renderPage(pageNum: number): Promise<void> | undefined {
   if (!doc || !pageCanvases[pageNum]) return;
   if (renderedScale.get(pageNum) === scale.value) return; // 已是最新
   const prev = renderChainByPage.get(pageNum) ?? Promise.resolve();
@@ -195,6 +196,7 @@ function renderPage(pageNum: number) {
       /* 上一环失败不影响后续 */
     });
   renderChainByPage.set(pageNum, next);
+  return next;
 }
 
 /** 实际渲染（串行链内执行）：取消并等待旧任务结束后再画。 */
@@ -305,6 +307,34 @@ function updateCurrentPage() {
   currentPageIdx.value = best;
 }
 
+/** 跳转到指定页（页码输入 / SyncTeX 正向的公共导航）：展开窗口 + 预热页高 + 渲染 + 居中滚动。
+ *  关键：等待目标页（及窗口内）页高落定后再**瞬间定位**，一次到位（避免 smooth 中途布局变化跳不到位）。 */
+async function goToPage(n: number) {
+  if (!doc || !numPages.value) return;
+  n = Math.max(1, Math.min(n, numPages.value));
+  // 1. 挂载窗口包含目标页
+  if (n < mountStart.value || n > mountEnd.value) {
+    mountStart.value = Math.max(1, n - PAGE_WINDOW);
+    mountEnd.value = Math.min(numPages.value, n + PAGE_WINDOW);
+    await nextTick();
+  }
+  // 2. 预热窗口内页高（虚拟化下布局/滚动定位准确）
+  for (let p = mountStart.value; p <= mountEnd.value; p++) if (!pageH1[p]) await knowHeight(p);
+  // 3. 渲染目标页（renderPage 现返回 promise，await 等渲染完成、页高已记录）
+  if (renderedScale.get(n) !== scale.value) await renderPage(n);
+  await nextTick();
+  // 4. 居中滚动（瞬间定位）
+  const pageEl = pageEls[n];
+  const c = container.value;
+  if (pageEl && c) {
+    const pr = pageEl.getBoundingClientRect();
+    const cr = c.getBoundingClientRect();
+    c.scrollTop = c.scrollTop + (pr.top + pr.height / 2 - cr.top) - cr.height / 2;
+    c.scrollLeft = c.scrollLeft + (pr.left + pr.width / 2 - cr.left) - cr.width / 2;
+  }
+  updateCurrentPage();
+}
+
 /** 设置缩放：0.5–4，重绘视口页并尽量保持滚动位置。换缩放 → structuralEpoch++ 重建 canvas。 */
 async function setScale(next: number) {
   const s = Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(next * 100) / 100));
@@ -330,6 +360,13 @@ async function fitWidth() {
   const vp1 = page.getViewport({ scale: 1 });
   const avail = Math.max(200, container.value.clientWidth - 40);
   await setScale(avail / vp1.width);
+}
+
+/** 页码输入（Enter/change）：跳转到指定 PDF 页。 */
+function onPageInput(e: Event) {
+  const v = parseInt((e.target as HTMLInputElement).value, 10);
+  if (!v || isNaN(v)) return;
+  void goToPage(v);
 }
 
 /** Ctrl+滚轮缩放（拦截 webview 页面缩放）。 */
@@ -455,9 +492,10 @@ watch(
     const box = pageHighlights[h.page];
     const canvas = pageCanvases[h.page];
     if (!box || !canvas) return;
-    // 保证该页已渲染（若远离视口则临时渲染）
+    // 保证该页已渲染（若远离视口则临时渲染；renderPage 现返回 promise，await 等渲染完成 + 页高落定）
     if (renderedScale.get(h.page) !== scale.value) {
       await renderPage(h.page);
+      await nextTick(); // 等布局稳定（canvas 尺寸/页高已记录）
     }
     const page = await doc.getPage(h.page);
     // synctex 的 y 从页面顶部起算，pdf.js 的坐标从底部起算——翻转（2026-08 实测）
@@ -469,18 +507,20 @@ watch(
     box.style.top = `${pt[1] - 10}px`;
     box.style.width = "50px";
     box.style.height = "20px";
-    // 滚动阅读区，使高亮点尽量居中（Ctrl+点击源码后跳转可见）
+    // 滚动阅读区，使高亮点居中（一次到位：确保目标页及之前页高已知 + 瞬间定位，
+    // 避免 smooth 动画中途布局变化导致跳不到位）
     const pageEl = pageEls[h.page];
     const c = container.value;
     if (pageEl && c) {
+      for (let p = mountStart.value; p <= h.page; p++) if (!pageH1[p]) await knowHeight(p);
       const pageRect = pageEl.getBoundingClientRect();
       const cRect = c.getBoundingClientRect();
-      const targetY = pageRect.top + pt[1] - 10 + 10; // 高亮中心（页面坐标系）
-      const targetX = pageRect.left + pt[0]; // 高亮中心（页面坐标系）
+      const targetY = pageRect.top + pt[1]; // 高亮中心（页面坐标系，viewTop 起算）
+      const targetX = pageRect.left + pt[0];
       c.scrollTo({
         top: c.scrollTop + (targetY - cRect.top) - cRect.height / 2,
         left: c.scrollLeft + (targetX - cRect.left) - cRect.width / 2,
-        behavior: "smooth",
+        behavior: "auto",
       });
     }
   }
@@ -564,7 +604,19 @@ onBeforeUnmount(() => {
       >+</button>
       <span class="toolbar-sep" />
       <button class="zoom-btn fit" title="适应宽度" @click="fitWidth">⤢ 适应宽度</button>
-      <span class="page-indicator" v-if="numPages > 0">{{ currentPageIdx }} / {{ numPages }}</span>
+      <span class="page-indicator" v-if="numPages > 0">
+        <input
+          class="page-input"
+          type="number"
+          :min="1"
+          :max="numPages"
+          :value="currentPageIdx"
+          :title="`跳转到页（1-${numPages}），回车或失焦跳转`"
+          @keydown.enter="onPageInput($event)"
+          @change="onPageInput($event)"
+        />
+        <span class="page-total">/ {{ numPages }}</span>
+      </span>
     </div>
     <div ref="container" class="preview-pane" @scroll.passive="onScroll" @wheel="onWheel">
       <div v-if="!preview.pdfPath" class="empty">
@@ -626,10 +678,28 @@ onBeforeUnmount(() => {
 .toolbar-sep { width: 1.5px; height: 14px; background: var(--line-soft); margin: 0 2px; }
 .page-indicator {
   margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-faint);
 }
+.page-input {
+  width: 40px; height: 22px;
+  padding: 0 4px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.page-input:focus { border-color: var(--blueberry); }
+.page-input::-webkit-inner-spin-button,
+.page-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.page-total { color: var(--ink-faint); }
 
 /* 点阵网格纸：呼应“写作的方格纸” */
 .preview-pane {
