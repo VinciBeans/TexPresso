@@ -16,7 +16,7 @@
 |---|---|
 | `npx vue-tsc --noEmit` | ✅ 通过（无类型错误） |
 | `cargo test -p texpresso-core` | ✅ 93 passed / 0 failed |
-| `npm run test`（vitest） | ⚠️ **沙箱内无法运行**：esbuild worker `spawn EPERM`（沙箱限制管道 stdio，非代码缺陷）。前端单测以静态方式审查 |
+| `npm run test`（vitest） | ✅ **28 passed / 4 files**（提权 `danger-full-access` 运行 esbuild worker；含新增 compile.spec.ts、useAutoSave 陈旧竞态回归、editor 并发去重回归） |
 
 > 说明：`src-tauri` 的真实 latexmk/synctex 集成测试全部为 `#[ignore]`（需 TeX Live），`cargo test` 不会执行它们。
 
