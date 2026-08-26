@@ -77,6 +77,9 @@ struct RunningJob {
     request: CompileRequest,
     attempt: u8,
     handle: tokio::task::JoinHandle<CompileOutcome>,
+    /// 已收到手动终止：on_finished 时即使 runner 忽略 cancel 返回了 Success/Timeout，
+    /// 也按 Aborted 呈现（设计语义：终止 = 停 + 清队，不误报成功/错误/PDF）。
+    aborted: bool,
 }
 
 pub struct Scheduler {
@@ -154,6 +157,9 @@ impl Scheduler {
             }
             SchedulerCommand::Abort => {
                 // 手动终止：停运行 + 清队列（design.md）
+                if let Some(job) = self.running.as_mut() {
+                    job.aborted = true;
+                }
                 if let Some(c) = self.cancel.take() {
                     c.cancel();
                 }
@@ -173,6 +179,7 @@ impl Scheduler {
             request: req,
             attempt,
             handle,
+            aborted: false,
         });
         self.cancel = Some(cancel);
         self.emitter.status(CompileStatusDto {
@@ -186,6 +193,14 @@ impl Scheduler {
             return;
         };
         self.cancel = None;
+
+        // 手动终止守卫：abort 后即使 runner 忽略 cancel 返回 Success/Timeout，也按 Aborted 呈现；
+        // 这样错误条目/PDF 就绪不会误发，决策表也按 Aborted 处理。
+        let outcome = if running.aborted {
+            CompileOutcome::Aborted
+        } else {
+            outcome
+        };
 
         // 内容与 IO 错误：先广播错误列表（前端在收到 Running 时清空）
         match &outcome {
@@ -467,6 +482,59 @@ mod tests {
         runner.release();
         wait_until(|| runner.calls().len() == 2).await;
         assert_eq!(runner.calls()[1].root_file, PathBuf::from("c.tex"));
+    }
+
+    /// 忽略取消契约的 runner：挂起直到 `release()`，然后**忽略 cancel** 返回 Success
+    /// （模拟真实 runner 不遵守 D2 取消契约的极端情况）。
+    struct CancelIgnoringRunner {
+        hold: Arc<tokio::sync::Notify>,
+    }
+
+    impl CancelIgnoringRunner {
+        fn new() -> Self {
+            Self {
+                hold: Arc::new(tokio::sync::Notify::new()),
+            }
+        }
+        fn release(&self) {
+            self.hold.notify_one();
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::scheduler::CompileRunner for CancelIgnoringRunner {
+        async fn compile(
+            &self,
+            _req: CompileRequest,
+            _cancel: tokio_util::sync::CancellationToken,
+        ) -> CompileOutcome {
+            self.hold.notified().await; // 挂起直到 release（期间忽略 cancel）
+            CompileOutcome::Success {
+                pdf_path: PathBuf::from("out.pdf"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn abort_overrides_stale_success_to_aborted() {
+        // 用户 abort 后 runner 忽略 cancel 返回 Success——调度器仍应呈现 Aborted，
+        // 且不误发 errors/pdf（termination 语义：停 + 清队，不报成功/PDF）。
+        let concrete = Arc::new(CancelIgnoringRunner::new());
+        let releaser = concrete.clone();
+        let log = Arc::new(EventLog::new());
+        let runner: Arc<dyn crate::scheduler::CompileRunner> = concrete;
+        let (handle, scheduler) = Scheduler::create(runner, event_log_emitter(log.clone()));
+        tokio::spawn(scheduler.run());
+        handle.compile(req("main.tex"));
+        wait_until(|| log.statuses().contains(&running_dto())).await;
+        handle.abort(); // 运行中终止：running.aborted = true
+        releaser.release(); // 放行 → runner 返回 Success，应被 override 为 Aborted
+        wait_until(|| log.statuses().contains(&failed_dto(FailureKind::Aborted))).await;
+        assert!(log.pdfs().is_empty(), "aborted 不应发 pdf-updated");
+        assert_eq!(
+            log.statuses(),
+            vec![running_dto(), failed_dto(FailureKind::Aborted)]
+        );
     }
 
     // ---- IO 错误 ----

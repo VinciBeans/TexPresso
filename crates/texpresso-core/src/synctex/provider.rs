@@ -27,6 +27,14 @@ pub fn parse_forward_output(text: &str) -> Result<SyncTexPosition, SyncTexError>
     let mut y = None;
     for line in text.lines() {
         let line = line.trim();
+        // 每个 `Output:` 起是新块：块内字段须齐全才采纳（不跨块混用——若首个块残缺如缺 y，
+        // 不应把下一块的 x/y 拼进来）。与注释「取第一个完整块」一致。
+        if line.starts_with("Output:") {
+            page = None;
+            x = None;
+            y = None;
+            continue;
+        }
         if page.is_none() {
             if let Some(v) = line.strip_prefix("Page:") {
                 page = v.trim().parse().ok();
@@ -42,18 +50,15 @@ pub fn parse_forward_output(text: &str) -> Result<SyncTexPosition, SyncTexError>
                 y = v.trim().parse().ok();
             }
         }
-        if page.is_some() && x.is_some() && y.is_some() {
-            break; // 已取到第一个完整块
+        if let (Some(page), Some(x), Some(y)) = (page, x, y) {
+            return Ok(SyncTexPosition { page, x, y });
         }
     }
-    match (page, x, y) {
-        (Some(page), Some(x), Some(y)) => Ok(SyncTexPosition { page, x, y }),
-        _ => Err(SyncTexError::Parse(format!(
-            "缺少 Page/x/y 字段（得到 {} 行）：{}",
-            text.lines().count(),
-            text.lines().next().unwrap_or("")
-        ))),
-    }
+    Err(SyncTexError::Parse(format!(
+        "缺少 Page/x/y 字段（得到 {} 行）：{}",
+        text.lines().count(),
+        text.lines().next().unwrap_or("")
+    )))
 }
 
 /// 解析 `synctex edit` 的 stdout。
@@ -250,6 +255,17 @@ mod tests {
         assert_eq!(pos.page, 2);
         assert!((pos.x - 79.370178).abs() < 1e-4, "应取第一个块的 x");
         assert!((pos.y - 387.564850).abs() < 1e-4, "应取第一个块的 y");
+    }
+
+    #[test]
+    fn parse_forward_incomplete_first_block_takes_complete_second() {
+        // 首个块残缺（缺 y），不应与后续块混用字段；应取第一个完整块（即第二个块）
+        let text = "Output:a.pdf\nPage:1\nx:10.0\n\
+            Output:a.pdf\nPage:2\nx:20.0\ny:30.0\n";
+        let pos = parse_forward_output(text).unwrap();
+        assert_eq!(pos.page, 2, "应取第一个完整块");
+        assert!((pos.x - 20.0).abs() < 1e-4, "x 应来自完整块");
+        assert!((pos.y - 30.0).abs() < 1e-4, "y 应来自完整块");
     }
 
     /// `synctex edit -o "1:112:532:<main.pdf>"` 映射回 main.tex（000test 第 47 行）。
