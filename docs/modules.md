@@ -76,27 +76,28 @@ pub struct RunningJob {
 }
 
 pub enum Decide {
-    Start(CompileRequest),    // 有 pending，执行之
-    Retry(CompileRequest),    // 超时且无 pending 且 attempt == 0
-    ShowError(FailureKind),   // 展示错误，回到 Idle
-    Stay,                     // 无事可做
+    StartPending,            // 执行队列中的最新请求（跳过错过的旧版本）
+    Retry,                   // 超时且无等待：同一请求重试一次
+    FinishOk,                // 成功且无等待：无事可做
+    Fail(FailureKind),       // 展示失败（不重试）
 }
 
-/// 输入只有两个：当前状态 + 编译结果。不读任何外部信息。
-pub fn decide(running: &RunningJob, outcome: &CompileOutcome, has_pending: bool) -> Decide;
+/// 输入只有：重试计数 + 编译结果 + 是否有等待条目。不读任何外部信息。
+pub fn decide(attempt: u8, outcome: &CompileOutcome, has_pending: bool) -> Decide;
 ```
 
-**算法**（来自 design.md 失败语义表，逐一对应）：
+**算法**（来自 design.md 失败语义表，逐一对应；见 `scheduler/policy.rs`）：
 
 | outcome | has_pending | attempt | 决策 |
 |---|---|---|---|
-| Success | — | — | 有 pending → `Start(pending)`；无 → `Stay` |
-| Timeout | true | — | `Start(pending)`（跳过重试） |
-| Timeout | false | 0 | `Retry(同请求, attempt+1)` |
-| Timeout | false | 1 | `ShowError(Timeout)` |
-| ContentError | true | — | `Start(pending)`（不重试） |
-| ContentError | false | — | `ShowError(ContentError)` |
-| Aborted | — | — | `Stay`（队列已在 abort 时清空） |
+| Success | — | — | 有 pending → `StartPending`；无 → `FinishOk` |
+| Timeout | true | — | `StartPending`（跳过重试） |
+| Timeout | false | 0 | `Retry` |
+| Timeout | false | 1 | `Fail(Timeout)` |
+| ContentError | true | — | `StartPending`（不重试） |
+| ContentError | false | — | `Fail(ContentError)` |
+| Aborted | true | — | `StartPending`（abort 后的新请求是新意图） |
+| Aborted | false | — | `Fail(Aborted)` |
 | IoError | — | — | 视同 ContentError（不重试） |
 
 **信息局部性**：`decide` 只读 `running` 与 `outcome`，不碰队列、不碰设置、不碰时间。重试计数是唯一跨调用信息，收在 `RunningJob.attempt`。
@@ -134,19 +135,22 @@ pub trait CompileRunner: Send + Sync {
 pub enum SchedulerCommand {
     Compile(CompileRequest),   // 组合层已把文件事件翻译成请求（D3）
     Abort,                     // 手动终止：取消运行中 + 清空队列
+    JobFinished(CompileOutcome), // 内部：运行任务完成（actor 私有，外部不发送）
 }
 
 pub struct Scheduler {
     rx: mpsc::UnboundedReceiver<SchedulerCommand>,
     runner: Arc<dyn CompileRunner>,
+    emitter: Emitter,          // 注入的事件发射（status / errors / pdf 三通道）
     queue: Queue,
     running: Option<RunningJob>,
     cancel: Option<CancellationToken>,
-    emit: EmitFn,              // 注入的事件发射闭包：fn(CompileStatusDto) + fn(Vec<ErrorEntry>)
 }
 
 impl Scheduler {
-    pub fn spawn(runner: Arc<dyn CompileRunner>, emit: EmitFn) -> UnboundedSender<SchedulerCommand>;
+    /// 返回（外部句柄, 调度器本体）：由接线方 spawn `scheduler.run()`。
+    pub fn create(runner: Arc<dyn CompileRunner>, emitter: Emitter) -> (SchedulerHandle, Scheduler);
+    pub async fn run(self);
     async fn handle(&mut self, cmd: SchedulerCommand);
     async fn on_finished(&mut self, outcome: CompileOutcome);
 }
@@ -159,14 +163,15 @@ handle(Compile(req)):
   Idle        → start(req)                    // 发 Running 事件
   Running     → queue.push(req); emit(Queued) // 合并，最多一个等待
 handle(Abort):
-  cancel 当前任务（若有）→ queue.clear()       // 手动终止语义：停运行 + 清队列
+  running.aborted = true; 取消当前任务 → 清队列   // 终止语义：停 + 清队；
+                                                 // abort 后即使 runner 忽略 cancel 也按 Aborted 呈现
 on_finished(outcome):
-  d = decide(running, outcome, !queue.is_empty())
+  d = decide(running.attempt, outcome, !queue.is_empty())
   match d:
-    Start(req)   → emit(Running); 启动新任务
-    Retry(req)   → emit(Running); attempt+1 启动
-    ShowError(k) → emit(Failed{kind:k}); 带 errors 时 emit(errors)
-    Stay         → 无事
+    StartPending → emit(Running); 启动队列最新
+    Retry        → emit(Running); attempt+1 启动同请求
+    FinishOk     → 无事
+    Fail(k)      → emit(Failed{kind:k}); 带 errors 时 emit(errors)
 ```
 
 **信息局部性**：`queue`、`running`、`cancel` 全部是 task 私有字段——**调度状态没有任何一份在 task 之外**。外部只有 `UnboundedSender`，连读都读不到。emit 闭包由 src-tauri 注入（发 tauri 事件），scheduler 不知道 tauri 存在。
@@ -190,15 +195,15 @@ impl CompileRunner for LatexmkRunner {
     async fn compile(&self, req: CompileRequest, cancel: CancellationToken) -> CompileOutcome {
         // 1. 构造命令（算法见下）
         // 2. tokio::process::Command::new("latexmk").current_dir(&req.project_root)
-        //    .args([...]).stdout(piped).stderr(piped).spawn()
+        //    .args([...]).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).spawn()
         // 3. tokio::select! {
         //       _ = tokio::time::sleep(req.timeout)   => { kill_tree(pid); return Timeout }
         //       _ = cancel.cancelled()                => { kill_tree(pid); return Aborted }
         //       status = child.wait()                 => {
         //           if status.success() {
         //               let src = tmp/<root>.pdf; let dst = project_root/<root>.pdf;
-        //               copy(src, dst) 成功 → Success{ pdf_path: dst }
-        //               失败 → IoError
+        //               copy(src → dst.tmp) → rename(dst.tmp, dst) 成功 → Success{ pdf_path: dst }
+        //               （原子化：失败 → IoError，旧 PDF 保留不被截断）
         //           } else {
         //               let log = fs.read_to_string(tmp/<root>.log)?;
         //               ContentError { errors: log_parser::parse_log(&log).errors }
@@ -213,10 +218,10 @@ impl CompileRunner for LatexmkRunner {
 **命令构造算法**（engine → 参数映射）：
 
 ```
-latexmk -xelatex -outdir=tmp -synctex=1 -interaction=nonstopmode <root_file 文件名>
+latexmk -xelatex -outdir=tmp -synctex=1 -interaction=nonstopmode <root_file 相对项目根路径>
 XeLaTeX → -xelatex；PdfLaTeX → -pdf；LuaLaTeX → -lualatex
-cwd = project_root（相对 input/include 才能解析）
-产物：tmp/<root>.pdf（拷贝到项目根）；tmp/<root>.synctex.gz（SyncTeX CLI 用）；tmp/<root>.log（解析用）
+cwd = project_root（相对 input/include 才能解析）；输入用完整相对路径（嵌套根文件如 css/thesis.tex 也能编译）
+产物：tmp/<root>.pdf（原子拷贝到项目根）；tmp/<root>.synctex.gz（SyncTeX CLI 用）；tmp/<root>.log（解析用）
 ```
 
 **信息局部性**：runner 无内部状态（`&self` 不可变），一次调用完全独立；每次调用所需信息全部在 `CompileRequest` 里。
@@ -368,8 +373,8 @@ pub fn parse_inverse_output(text: &str) -> Result<SourcePosition>;   // 纯函�
 
 ```
 settings（core）              src-tauri
-├── model.rs                  ├── storage.rs —— 读写盘、原子写
-├── merge.rs                  └── hot_reload.rs —— 文件监视 → 重载 → 广播
+├── model.rs                  ├── storage.rs —— 读写盘、原子写、自写盘 hash 过滤（is_self_write）
+├── merge.rs                  └── (watch.rs handle_settings_change —— 监视 → 重载 → 广播)
 └── validate.rs
 ```
 
@@ -389,16 +394,18 @@ pub fn validate(s: &Settings) -> Result<(), Vec<String>>;
 /// 局部更新：只改 patch 里的键，其余不动
 pub fn apply_patch(base: &mut Settings, patch: SettingsPatch) -> Result<()>;
 
-// src-tauri storage.rs
-pub async fn load_global(fs: &dyn FileSystem, dir: &Path) -> Settings;   // 缺失 → default + 落盘
-pub async fn load_project(fs: &dyn FileSystem, project_root: &Path) -> Settings; // 缺失 → 空（全继承全局）
-pub async fn save_global(..., s: &Settings);   // 原子写：临时文件 + rename
-pub async fn save_project(..., s: &Settings);
+// src-tauri storage.rs（自写盘过滤也在此；watch.rs 负责监视→重载→广播）
+pub fn global_path(&self) -> &Path;
+pub async fn load_global(&self, fs: &dyn FileSystem) -> Settings;   // 缺失/损坏/越界 → default + 落盘
+pub async fn save_global(&self, s: &Settings);   // 原子写：临时文件 + rename
+pub async fn load_overrides(&self, fs: &dyn FileSystem, project_root: &Path) -> ProjectOverrides; // 缺失 → 空（全继承全局）
+pub async fn save_overrides(&self, project_root: &Path, o: &ProjectOverrides);
+pub fn is_self_write(&self, path: &Path, content: &str) -> bool;  // 自写盘 hash 过滤（D6，消费一次）
 ```
 
 **算法（merge）**：字段级 Option 语义——全局 `settings.json` 与项目 `.texpresso/settings.json` 同 schema（含 `schema_version`）；项目文件只写它覆盖的键，其余继承。
 
-**热更新（设计决策 D6）**：watch 识别 `.texpresso/settings.json` 变化 → 重载 → 广播 `settings-changed`。**自写盘过滤**：`update_settings` 写盘时记录 `(path, content_hash)`；watch 事件到达时比对 hash，相同则跳过（防"自己写 → 自己重载 → 重复广播"）。hash 存在 hot_reload 小模块内，不跨模块。
+**热更新（设计决策 D6）**：watch 识别 `.texpresso/settings.json` 变化 → 重载 → 广播 `settings-changed`。**自写盘过滤**：`update_settings` 写盘时记录 `(path, content_hash)`；watch 事件到达时比对 hash，相同则跳过（防"自己写 → 自己重载 → 重复广播"）。hash 存在 `storage.last_write` 内，不跨模块。
 
 **信息局部性**：core 的合并/校验是纯函数；全局设置快照是 §1 清单里唯一的 `RwLock` 共享态——写者只有 storage 模块，读方（组合层构造 CompileRequest 时）只取一次性快照拷贝，不持有引用。
 
@@ -413,7 +420,7 @@ compose.rs        —— 组合层：文件事件 → 编译请求（D3 的关�
 // watch.rs：notify 事件流 → 项目内路径
 // 过滤规则（与 project::is_ignored 共用）：
 //   .tex（排除 tmp/）     → compose.on_tex_changed(path)
-//   settings.json（全局或项目）→ hot_reload 重载 + 广播 settings-changed
+//   settings.json（全局或项目）→ 热更新（is_self_write 过滤后重载 + 广播 settings-changed）
 //   其余                   → 丢弃
 // 每个被接受的事件同时旁路广播 files-changed{paths}（前端文件树防抖重建）
 
@@ -445,7 +452,7 @@ pub fn on_tex_changed(&self, path: PathBuf) {
 | list_dir(path) | 递归 `collect_tex_files` 变体（返回全树 DirEntryInfo，含目录；前端防抖重建用） |
 | read_file / write_file | tokio::fs 读写 + 路径校验 |
 | save_all / save_file | 写盘（同 write_file）——不触发任何编译逻辑，watch 自然驱动 |
-| compile_now | compose.on_tex_changed(当前活动文件) 同路径：构造请求入队 |
+| compile_now | compose.compile_request_manual：只看 root_file（忽略活动文件路径），构造请求入队 |
 | abort_compile | scheduler.send(Abort) |
 | synctex_forward / inverse | 调 provider，错误 → { code, message } |
 | get_settings / update_settings | 读快照 / apply_patch → 校验 → 写盘（记录 hash）→ 广播 settings-changed |
@@ -486,7 +493,7 @@ useAutoSave 依赖 editorStore.dirty + settingsStore（读）
 | projectStore | project、rootFile、fileTree、treeVersion | openProject、refreshTree |
 | editorStore | openTabs[]、activePath、dirtyPaths:Set、lastSaved:Map<path,time> | openFile、closeTab、markDirty、saveFile、saveAll、onFilesChanged |
 | compileStore | phase、kind、errors[] | setStatus、setErrors |
-| previewStore | pdfPath、page、scrollPos、highlight | reload、setHighlight |
+| previewStore | pdfPath、reloadKey、highlight | onPdfUpdated、setHighlight |
 | settingsStore | settings | setSettings、updateSettings |
 
 **前端自保存过滤算法（editorStore.onFilesChanged）**：入参 paths 中，`lastSaved` 里存在且时间近（< 2s）的路径判定为"自己刚保存"→ 忽略；其余 → 已打开且不脏 → 重载内容；已打开且脏 → 保留 + 状态栏提示；未打开 → 忽略（文件树自会刷新）。`lastSaved` 是 editorStore 模块内状态，不进任何函数参数。
@@ -536,7 +543,7 @@ settings-changed: Settings
 | D3 | 组合层翻译"文件事件→CompileRequest"，scheduler 不感知项目 | watch 直连 scheduler 传路径 | 最小外部依赖；所有触发源收敛单一入口 |
 | D4 | core IO 经 FileSystem trait（read_dir/read_to_string 两方法） | 每函数手写回调注入 | 接口面最小、单一事实来源 |
 | D5 | 根文件探测正则启发式 | 完整 TeX 词法解析 | 成本收益不成比例；局限已记录，root_file 覆盖是逃生门 |
-| D6 | 设置热更新 + 自写盘 content_hash 过滤 | 重启生效 / 不设防 | 防"自己写→自己重载"循环，过滤状态收在 hot_reload 模块内 |
+| D6 | 设置热更新 + 自写盘 content_hash 过滤 | 重启生效 / 不设防 | 防"自己写→自己重载"循环，过滤状态收在 storage.last_write |
 | D7 | 前端 store 单向依赖 + events.ts 统一分发 | store 互引 / 事件总线库 | 依赖图可推理；避免引入总线抽象 |
 | D8 | 自建命令路径校验（项目根内 canonicalize 前缀） | 信任前端传入路径 | 自建命令无 Tauri 权限模型兜底，必须自守 |
 

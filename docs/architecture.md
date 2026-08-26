@@ -70,12 +70,14 @@ Cargo workspace 两 crate（见 ADR-0006）：
 |---|---|---|
 | open_project | folder | ProjectInfo（含根文件探测结果） |
 | list_dir | path | Vec\<DirEntryInfo\>（递归文件树，含目录；前端防抖） |
-| read_file / write_file | path [, content] | content / 空 |
-| save_all / save_file | [path] | 空 |
+| read_file | path | content |
+| write_file | path, content | 空（与 save_file 完全同一实现 `save_content`，别名） |
+| save_file | path, content | 空（同上） |
+| save_all | files: Vec\<FileContent\> | 空（自动保存批量写盘用） |
 | compile_now | 空 | 空 |
 | abort_compile | 空 | 空 |
 | synctex_forward | file, line, col | { page, x, y } |
-| synctex_inverse | page, x, y | { file, line } |
+| synctex_inverse | page, x, y | { file, line, column } |
 | get_settings / update_settings | [patch] | Settings |
 
 文件读写走自建命令，不用 tauri-plugin-fs（"打开任意文件夹"的动态 scope 配置绕）。
@@ -84,7 +86,7 @@ Cargo workspace 两 crate（见 ADR-0006）：
 
 | 事件 | 载荷 |
 |---|---|
-| compile-status | { phase: queued\|running\|success\|failed, kind?: timeout\|content_error\|aborted } |
+| compile-status | { phase: queued\|running\|success\|failed, kind: timeout\|content_error\|aborted\|null } |
 | errors-updated | ErrorEntry[]（失败时携带；编译中清空） |
 | pdf-updated | { path }（编译成功、PDF 新版本就绪） |
 | files-changed | { paths, structural }（监视旁路：文件树刷新/重载判定；`structural`=true 仅增/删/重命名，内容修改为 false——见 modules.md §7） |
@@ -102,10 +104,10 @@ Cargo workspace 两 crate（见 ADR-0006）：
 ### 5.1 编译触发链
 
 ```
-连续模式：输入 → Monaco 变更 → 前端防抖 500ms → save_all（自动保存全部脏文件）
+连续模式：输入 → Monaco 变更 → 前端防抖 500ms → save_all（自动保存全部脏文件，仅 continuous 模式）
        → 磁盘变化 → notify 事件 → 调度器入队（合并队列吸收风暴）→ 编译
-保存模式：Ctrl+S → save_file → 同上
-手动编译：compile_now → 直接入队（无论有无变化）
+保存模式：编辑不自动写盘；Ctrl+S / 点「编译」/ 关标签 → flush()（save_all 全部脏文件）→ 同上
+手动编译：compile_now → 直接入队（无论有无变化；on_save 下点「编译」会先 flush 落盘）
 外部修改：notify → 入队（不依赖前端）
 ```
 
