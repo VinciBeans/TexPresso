@@ -111,34 +111,36 @@ const items = snippets.map((s) => ({
  *  其余 `\x` 一律保留字面 `\`（如 `\begin`→`\`+`begin`）。故片段体用单反斜杠
  *  （TS 里 `\\begin`→JS `\begin`）插入即得真实 `\begin{...}`，无需写 `\\\\`。
  *  B2：trigger 只留 `\`（去掉 `{`，避免在带参处列出全部片段造成噪音）。
- *  B7（修复 \\section）：Monaco `getWordUntilPosition` 的单词不含 `\`
- *  （`\sec`→word=`sec`，startColumn=2）。若词首前一字符是 `\`，须把 range 前延一列（含 `\`），
- *  否则补全时残留前导 `\` 与片段自带 `\` 拼成 `\\section`。 */
+/**
+ *  B7（修复 \\section）：`\sec` 时 Monaco 当前词为 `sec`（不含 `\`）。
+ *  key1：range 必须等于当前词范围 `getWordUntilPosition`，若把 range 前延到含 `\`（如 [1,5]），
+ *  Monaco 会因 range 与当前词不一致而**过滤掉该建议**（建议列表空白）。故 range 保持 `word.startColumn`。
+ *  key2：词首前一字符是 `\` 时，该 `\` 保留在替换区间之外；若片段自带前导 `\`，拼成 `\\section`。
+ *  故此时剥掉片段自带的前导 `\`（`\section`→`section`），替换后 `\`+`section{}`=`\section{}`（单反斜杠）。 */
 export const latexCompletionProvider: monaco.languages.CompletionItemProvider = {
   triggerCharacters: ["\\"],
   provideCompletionItems(model, position) {
     const word = model.getWordUntilPosition(position);
     const lower = word.word.toLowerCase();
-    // LaTeX 命令以反斜杠开头：前延一列把它纳入替换 range
-    let startColumn = word.startColumn;
     const line = model.getLineContent(position.lineNumber);
-    if (startColumn > 1 && line.charCodeAt(startColumn - 2) === 92 /* '\\' */) {
-      startColumn -= 1;
-    }
-    const suggestions = items.filter(
-      (it) => !lower || it.label.toLowerCase().startsWith(lower)
-    );
-    return {
-      suggestions: suggestions.map((it) => ({
-        ...it,
-        range: {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn,
-          endColumn: word.endColumn,
-        },
-      })),
-    };
+    const backslashBefore = word.startColumn > 1 && line.charCodeAt(word.startColumn - 2) === 92 /* '\\' */;
+    const suggestions = items
+      .filter((it) => !lower || it.label.toLowerCase().startsWith(lower))
+      .map((it) => {
+        const insertText =
+          backslashBefore && it.insertText.startsWith("\\") ? it.insertText.slice(1) : it.insertText;
+        return {
+          ...it,
+          insertText,
+          range: {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          },
+        };
+      });
+    return { suggestions };
   },
 };
 
