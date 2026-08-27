@@ -129,7 +129,9 @@ export const latexCompletionProvider: monaco.languages.CompletionItemProvider = 
   },
 };
 
-/** LaTeX 环境块折叠：\begin{env} ... \end{env}（含嵌套）。 */
+/** LaTeX 环境块折叠：\begin{env} ... \end{env}（含嵌套）。
+ *  注意：Monaco FoldingRange.start/end 为 **1-based** 行号（见 monaco.d.ts），
+ *  此处 i 是 0-based 下标 → 输出需 +1，否则折叠锚点会整体上移一行（\begin 前一行、\end 露出）。 */
 export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
   provideFoldingRanges(model) {
     const ranges: monaco.languages.FoldingRange[] = [];
@@ -142,11 +144,11 @@ export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
       if (m[1] === "begin") {
         stack.push({ start: i, env: m[2] });
       } else {
-        // end：与栈内最近的同名 begin 配对（0-based 行号）
+        // end：与栈内最近的同名 begin 配对（转为 1-based 输出）
         for (let s = stack.length - 1; s >= 0; s--) {
           if (stack[s].env === m[2]) {
             if (i - stack[s].start >= 1) {
-              ranges.push({ start: stack[s].start, end: i });
+              ranges.push({ start: stack[s].start + 1, end: i + 1 });
             }
             stack.length = s; // 弹出该 begin 及其上的未闭合项
             break;
