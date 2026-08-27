@@ -24,7 +24,7 @@ const snippets: SnippetDef[] = [
   { label: "date", body: "\\date{${1:\\today}}", detail: "日期" },
   { label: "maketitle", body: "\\maketitle", detail: "生成标题" },
   { label: "tableofcontents", body: "\\tableofcontents", detail: "目录" },
-  { label: "setlength", body: "\\setlength{\\${1:parindent}}{${2:0pt}}", detail: "设置长度" },
+  { label: "setlength", body: "\\setlength{\\\\${1:parindent}}{${2:0pt}}", detail: "设置长度" },
 
   // ---- 通用环境（begin/end 名字同步） ----
   { label: "env", body: "\\begin{${1:env}}\n\t${2}\n\\end{${1}}", detail: "自定义环境（名字同步）" },
@@ -36,7 +36,7 @@ const snippets: SnippetDef[] = [
   { label: "description", body: "\\begin{description}\n\t\\item[${1:label}] ${2}\n\\end{description}", detail: "描述列表" },
   { label: "figure", body: "\\begin{figure}[${1:htbp}]\n\t\\centering\n\t\\includegraphics[width=${2:0.5\\textwidth}]{${3:image}}\n\t\\caption{${4}}\n\t\\label{${5}}\n\\end{figure}", detail: "图片环境" },
   { label: "table", body: "\\begin{table}[${1:htbp}]\n\t\\centering\n\t\\caption{${2}}\n\t\\label{${3}}\n\\end{table}", detail: "表格环境" },
-  { label: "tabular", body: "\\begin{tabular}{${1:ccc}}\n\t${2} \\\\\n\\end{tabular}", detail: "表格体" },
+  { label: "tabular", body: "\\begin{tabular}{${1:ccc}}\n\t${2} \\\\\\\\\n\\end{tabular}", detail: "表格体" },
   { label: "center", body: "\\begin{center}\n\t${1}\n\\end{center}", detail: "居中环境" },
   { label: "abstract", body: "\\begin{abstract}\n\t${1}\n\\end{abstract}", detail: "摘要环境" },
   { label: "theorem", body: "\\begin{${1:theorem}}\n\t${2}\n\\end{${1}}", detail: "定理类环境（名字同步）" },
@@ -85,8 +85,8 @@ const snippets: SnippetDef[] = [
   { label: "underline", body: "\\underline{${1}}", detail: "下划线" },
   { label: "emph", body: "\\emph{${1}}", detail: "强调" },
   { label: "text", body: "\\text{${1}}", detail: "数学内文本" },
-  { label: "newcommand", body: "\\newcommand{\\${1:cmd}}{${2}}", detail: "定义命令" },
-  { label: "renewcommand", body: "\\renewcommand{\\${1:cmd}}{${2}}", detail: "重定义命令" },
+  { label: "newcommand", body: "\\newcommand{\\\\${1:cmd}}{${2}}", detail: "定义命令" },
+  { label: "renewcommand", body: "\\renewcommand{\\\\${1:cmd}}{${2}}", detail: "重定义命令" },
   { label: "item", body: "\\item ${1}", detail: "列表项" },
 
   // ---- 文件操作 ----
