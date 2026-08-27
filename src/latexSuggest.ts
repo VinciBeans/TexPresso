@@ -106,9 +106,13 @@ const items = snippets.map((s) => ({
   sortText: s.label,
 }));
 
-/** LaTeX 代码片段补全（含数学/命令），trigger `\` 与 `{`。 */
+/** LaTeX 代码片段补全（含数学/命令），trigger `\`。
+ *  B1 核对：Monaco `SnippetParser._parseEscaped` 只把 `\$`/`\}`/`\\` 当转义，
+ *  其余 `\x` 一律保留字面 `\`（如 `\begin`→`\`+`begin`）。故片段体用单反斜杠
+ *  （TS 里 `\\begin`→JS `\begin`）插入即得真实 `\begin{...}`，无需写 `\\\\`。
+ *  B2：trigger 只留 `\`（去掉 `{`，避免在带参处列出全部片段造成噪音）。 */
 export const latexCompletionProvider: monaco.languages.CompletionItemProvider = {
-  triggerCharacters: ["\\", "{"],
+  triggerCharacters: ["\\"],
   provideCompletionItems(model, position) {
     const word = model.getWordUntilPosition(position);
     const lower = word.word.toLowerCase();
@@ -130,8 +134,10 @@ export const latexCompletionProvider: monaco.languages.CompletionItemProvider = 
 };
 
 /** LaTeX 环境块折叠：\begin{env} ... \end{env}（含嵌套）。
- *  注意：Monaco FoldingRange.start/end 为 **1-based** 行号（见 monaco.d.ts），
- *  此处 i 是 0-based 下标 → 输出需 +1，否则折叠锚点会整体上移一行（\begin 前一行、\end 露出）。 */
+ *  注意 1：Monaco FoldingRange.start/end 为 **1-based** 行号（见 monaco.d.ts），
+ *  此处 i 是 0-based 下标 → 输出需 +1，否则折叠锚点会整体上移一行（\begin 前一行、\end 露出）。
+ *  注意 2（B3）：剥离行内注释（`%` 之后）且跳过含 `\verb` 的行，避免把注释/字面量里的
+ *  `\begin{}`/`\end{}` 误判为真环境而生成伪折叠区。 */
 export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
   provideFoldingRanges(model) {
     const ranges: monaco.languages.FoldingRange[] = [];
@@ -139,12 +145,15 @@ export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
     const beginRe = /\\(begin|end)\{([^}]*)\}/;
     const stack: { start: number; env: string }[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(beginRe);
+      const raw = lines[i];
+      if (/\\verb/.test(raw)) continue; // \verb 内是字面量，其 `{...}` 不应成环境
+      const code = raw.split("%")[0];   // 剥注释：`%` 之后为注释，其 `\begin{}` 不应成环境
+      const m = code.match(beginRe);
       if (!m) continue;
       if (m[1] === "begin") {
         stack.push({ start: i, env: m[2] });
       } else {
-        // end：与栈内最近的同名 begin 配对（转为 1-based 输出）
+        // end：与栈内最近的同名 begin 配对（转为 1-based 输出；B4：畸形/未闭合环境按就近配对、多余项可忽略）
         for (let s = stack.length - 1; s >= 0; s--) {
           if (stack[s].env === m[2]) {
             if (i - stack[s].start >= 1) {
