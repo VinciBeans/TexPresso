@@ -26,6 +26,11 @@ describe("stripTexComment", () => {
   it("转义 \\% 是字面量百分号，不作注释（C3）", () => {
     expect(stripTexComment("\\%\\section{X}")).toBe("\\%\\section{X}");
   });
+
+  it("偶数反斜杠 \\\\% 的 % 是真注释（C5：\\\\) 换行+% 注释）", () => {
+    // "a\\\\%b" = a\\%b（% 前 2 个反斜杠=偶数 → 注释）→ 截断到 a\\
+    expect(stripTexComment("a\\\\%b")).toBe("a\\\\");
+  });
 });
 
 describe("shouldStripLeadBackslash", () => {

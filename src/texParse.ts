@@ -7,15 +7,23 @@
 /**
  * 剥离 LaTeX 行内的 `\verb` 跨度与真注释，返回「代码」部分。
  * ① 移除非行内 `\verb*?<delim>…<delim>` 字面量（其内容含 `%`/`{...}` 不应被当作注释/环境/章节）；
- * ② 在「未转义」的 `%` 处截断（`\%` 是字面量百分号，不作注释——C3）。
+ * ② 在「真注释」`%` 处截断。判定（C5）：`%` 前为**连续奇数个反斜杠** → 转义字面 `%`（如 `\%`、`\\\%`），
+ *    不作注释；**偶数个（含 0）** → 真注释（如 `\\%`——`\\` 换行+`%` 注释，`%` 才是注释）。
+ *    注：JS 正则 lookbehind 不支持变长，故用扫描数反斜杠。
  * 结果用于匹配 `\begin`/`\section` 等结构命令。
  */
 export function stripTexComment(line: string): string {
   // \verb 的定界符是紧跟其后的任意非字母、非空白、非反斜杠字符（常为 |）。
   // (.*?)\1 非贪婪吃到下一个相同定界符。
   const noVerbatim = line.replace(/\\verb\*?([^a-zA-Z\s\\])(.*?)\1/g, "");
-  // 在未被反斜杠转义的 `%`（真注释）处截断；`\%` 保留。
-  return noVerbatim.split(/(?<!\\)%/)[0];
+  // 找到第一个「真注释 %」（其前为偶数个连续反斜杠，含 0），截断；全部是转义 % 则原样返回。
+  for (let i = 0; i < noVerbatim.length; i++) {
+    if (noVerbatim[i] !== "%") continue;
+    let bs = 0;
+    for (let j = i - 1; j >= 0 && noVerbatim[j] === "\\"; j--) bs++;
+    if (bs % 2 === 0) return noVerbatim.slice(0, i);
+  }
+  return noVerbatim;
 }
 
 /**
