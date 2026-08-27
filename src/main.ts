@@ -61,6 +61,10 @@ if (!monaco.languages.getLanguages().some((l) => l.id === "latex")) {
 monaco.languages.setMonarchTokensProvider("latex", latexLanguage);
 monaco.languages.setLanguageConfiguration("latex", latexConfiguration);
 
+// ---- LaTeX 语言扩展（v1.1）：代码片段补全 + 环境块折叠 ----
+import { registerLatexProvider } from "./latexSuggest";
+registerLatexProvider();
+
 const app = createApp(App);
 app.use(createPinia());
 app.mount("#app");

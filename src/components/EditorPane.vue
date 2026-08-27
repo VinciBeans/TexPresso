@@ -51,6 +51,18 @@ onMounted(() => {
     language: "latex",
     readOnly: true, // 未打开项目/文件时源码区不可编辑（防"空文件"可写误输入）
     ariaLabel: "源码编辑器",
+    // ---- v1.1 编辑器增强（design.md §编辑器）：折叠 / 多光标 / 代码片段 ----
+    folding: true,
+    foldingHighlight: true,
+    showFoldingControls: "mouseover",
+    tabCompletion: "on",            // Tab 展开代码片段（snippetSuggestions 需开启）
+    snippetSuggestions: "inline",   // 片段内联在建议列表（可 Ctrl+Space 触发）
+    quickSuggestions: { other: true, comments: false, strings: true },
+    suggest: { showSnippets: true },
+    // 多光标：Alt+点击/Alt+方向（默认 altKey）。避免设为 ctrlCmd——Ctrl+点击被用于
+    // SyncTeX 正向（onMouseDown ctrlKey），两者会冲突。Ctrl+D 加选下一处、Ctrl+Shift+L 全选同词（默认）。
+    multiCursorModifier: "alt",     // Alt+点击/Alt+方向；避免设为 ctrlCmd 与 SyncTeX Ctrl+点击冲突
+    multiCursorPaste: "spread",     // 粘贴时广播到所有光标
   });
 
   // 内容变更 → 脏标记 + 缓冲（自动保存的数据源）

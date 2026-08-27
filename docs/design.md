@@ -93,7 +93,7 @@
 ## 编辑器
 
 - **v1（已实现）**：语法高亮（自研 Monarch）、查找替换、错误跳转、**中文 IME 兼容验证**（Windows 首发，webview 组合输入是已知坑，e2e 有实操要点见 troubleshooting）
-- **v1.1（规划）**：texlab LSP、折叠、多光标、代码片段、拼写检查
+- **v1.1（规划）**：texlab LSP、~~折叠~~（**已实现** 2026-08-26：`\begin{env}`/`\end{env}` 环境块折叠，见 modules.md §12）、~~多光标~~（**已实现**：Alt+点击/Alt+方向，Ctrl+D 加选；多光标修饰符设为 alt 避免与 SyncTeX Ctrl+点击冲突）、~~代码片段~~（**已实现**：LaTeX CompletionItemProvider，覆盖文档/环境/章节/数学/格式，Tab 展开）、拼写检查
 
 ## MVP 边界
 
