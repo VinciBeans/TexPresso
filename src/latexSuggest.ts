@@ -3,6 +3,7 @@
 //   - 折叠：FoldingRangeProvider，按 \begin{env} ... \end{env} 环境块折叠。
 // 挂接：main.ts 注册语言后调用 registerLatexProvider()。
 import * as monaco from "monaco-editor";
+import { stripTexComment, shouldStripLeadBackslash } from "./texParse";
 
 const Snippet = monaco.languages.CompletionItemKind.Snippet;
 const InsertAsSnippet = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
@@ -106,24 +107,29 @@ const items = snippets.map((s) => ({
   sortText: s.label,
 }));
 
-/** LaTeX 代码片段补全（含数学/命令），trigger `\`。
- *  B1 核对：Monaco `SnippetParser._parseEscaped` 只把 `\$`/`\}`/`\\` 当转义，
- *  其余 `\x` 一律保留字面 `\`（如 `\begin`→`\`+`begin`）。故片段体用单反斜杠
- *  （TS 里 `\\begin`→JS `\begin`）插入即得真实 `\begin{...}`，无需写 `\\\\`。
- *  B2：trigger 只留 `\`（去掉 `{`，避免在带参处列出全部片段造成噪音）。
 /**
- *  B7（修复 \\section）：`\sec` 时 Monaco 当前词为 `sec`（不含 `\`）。
- *  key1：range 必须等于当前词范围 `getWordUntilPosition`，若把 range 前延到含 `\`（如 [1,5]），
- *  Monaco 会因 range 与当前词不一致而**过滤掉该建议**（建议列表空白）。故 range 保持 `word.startColumn`。
- *  key2：词首前一字符是 `\` 时，该 `\` 保留在替换区间之外；若片段自带前导 `\`，拼成 `\\section`。
- *  故此时剥掉片段自带的前导 `\`（`\section`→`section`），替换后 `\`+`section{}`=`\section{}`（单反斜杠）。 */
+ * LaTeX 代码片段补全（含数学/命令），trigger `\`。
+ *
+ * B1 反斜杠转义：Monaco `SnippetParser._parseEscaped` 只把 `\$`/`\}`/`\\` 当转义，
+ * 其余 `\x` 一律保留字面 `\`（如 `\begin`→`\`+`begin`）。故片段体用单反斜杠
+ * （TS 里 `\\begin`→JS `\begin`）插入即得真实 `\begin{...}`，无需写 `\\\\`。
+ *
+ * B2 trigger：只留 `\`（去掉 `{`，避免在带参处列出全部片段造成噪音）。
+ *
+ * B7 单反斜杠：`\sec` 时 Monaco 当前词为 `sec`（不含 `\`）。
+ *  - key1：range 必须等于当前词范围 `getWordUntilPosition`。若把 range 前延到含 `\`（如 [1,5]），
+ *    Monaco 会因 range 与当前词不一致而**过滤掉该建议**（建议列表空白）。故 range 保持 `word.startColumn`。
+ *  - key2：词首前一字符是 `\`（`shouldStripLeadBackslash`）时，该 `\` 保留在替换区间之外；
+ *    若片段自带前导 `\`，会拼成 `\\section`。故此时剥掉片段自带的前导 `\`（`\section`→`section`），
+ *    替换后 `\`+`section{}`=`\section{}`（单反斜杠）。
+ */
 export const latexCompletionProvider: monaco.languages.CompletionItemProvider = {
   triggerCharacters: ["\\"],
   provideCompletionItems(model, position) {
     const word = model.getWordUntilPosition(position);
     const lower = word.word.toLowerCase();
     const line = model.getLineContent(position.lineNumber);
-    const backslashBefore = word.startColumn > 1 && line.charCodeAt(word.startColumn - 2) === 92 /* '\\' */;
+    const backslashBefore = shouldStripLeadBackslash(line, word.startColumn);
     const suggestions = items
       .filter((it) => !lower || it.label.toLowerCase().startsWith(lower))
       .map((it) => {
@@ -147,8 +153,9 @@ export const latexCompletionProvider: monaco.languages.CompletionItemProvider = 
 /** LaTeX 环境块折叠：\begin{env} ... \end{env}（含嵌套）。
  *  注意 1：Monaco FoldingRange.start/end 为 **1-based** 行号（见 monaco.d.ts），
  *  此处 i 是 0-based 下标 → 输出需 +1，否则折叠锚点会整体上移一行（\begin 前一行、\end 露出）。
- *  注意 2（B3）：剥离行内注释（`%` 之后）且跳过含 `\verb` 的行，避免把注释/字面量里的
- *  `\begin{}`/`\end{}` 误判为真环境而生成伪折叠区。 */
+ *  注意 2（B3/C2）：用 `stripTexComment` 剥离行内 `\verb` 跨度与真注释（`%` 之后），
+ *  避免把注释/字面量里的 `\begin{}`/`\end{}` 误判为真环境；同时 `\verb|...|` 只被剥其跨度，
+ *  不再整行跳过（一行兼有 `\verb` 与真 `\begin`/`\end` 时不漏折叠）。 */
 export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
   provideFoldingRanges(model) {
     const ranges: monaco.languages.FoldingRange[] = [];
@@ -156,9 +163,7 @@ export const latexFoldingProvider: monaco.languages.FoldingRangeProvider = {
     const beginRe = /\\(begin|end)\{([^}]*)\}/;
     const stack: { start: number; env: string }[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
-      if (/\\verb/.test(raw)) continue; // \verb 内是字面量，其 `{...}` 不应成环境
-      const code = raw.split("%")[0];   // 剥注释：`%` 之后为注释，其 `\begin{}` 不应成环境
+      const code = stripTexComment(lines[i]); // 剥 \verb 跨度 + 真注释
       const m = code.match(beginRe);
       if (!m) continue;
       if (m[1] === "begin") {

@@ -8,6 +8,7 @@ import { computed, ref } from "vue";
 import { useEditorStore } from "./editor";
 import { useProjectStore, normalizePath } from "./project";
 import { useSyncTex } from "../composables/useSyncTex";
+import { stripTexComment } from "../texParse";
 import { ipc } from "../services/ipc";
 
 export interface OutlineNode {
@@ -98,10 +99,10 @@ export const useOutlineStore = defineStore("outline", () => {
     const lines = content.split(/\r?\n/);
     let inVerbatim = false;
     for (let i = 0; i < lines.length; i++) {
-      // 剥离行内 `%` 注释（`%` 之后为注释，其 `\section`/\include 不应生成大纲项/跟随）——
-      // 与折叠 provider 的 B3 一致，避免「正文 % \section{...}」这类行产生伪大纲项
-      const code = lines[i].split("%")[0];
-      const trimmed = code.trimStart();
+      // 剥离 \verb 跨度 + 真注释（`%` 之后，但 `\%`/`\verb` 内 `%` 不作注释，见 texParse）——
+      // 与折叠 provider 的 B3 一致，避免「正文 % \section{...}」这类行产生伪大纲项；
+      // C3：`\section` 跟在转义 `\%` 或 `\verb|%|` 之后不再被误切。
+      const trimmed = stripTexComment(lines[i]).trimStart();
       if (!trimmed) continue; // 空行 / 行首注释
       // 跳过 verbatim 环境：其中的 \section/\include 是字面量，不应生成大纲项/跟随
       if (/\\begin\{verbatim\*?\}/.test(trimmed)) {
