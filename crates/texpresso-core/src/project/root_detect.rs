@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// 提取 `\input{...}` / `\include{...}` 引用（modules.md §3.4）。
-pub fn extract_includes(content: &str) -> Vec<String> {
+fn extract_includes(content: &str) -> Vec<String> {
     static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
         Regex::new(r"\\(input|include)\{([^}]+)\}").expect("include regex")
     });
@@ -23,7 +23,7 @@ pub fn extract_includes(content: &str) -> Vec<String> {
 
 /// 提取 `\documentclass[...]{...}` 声明（含可选参数形式）。
 /// TeX 允许 `\documentclass` 与 `{` 之间有空白（`\documentclass {article}` 合法），故用 `\s*` 放宽。
-pub fn extract_documentclass(content: &str) -> Option<String> {
+fn extract_documentclass(content: &str) -> Option<String> {
     static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
         Regex::new(r"\\documentclass\s*(\[[^\]]*\])?\s*\{([^}]+)\}").expect("documentclass regex")
     });

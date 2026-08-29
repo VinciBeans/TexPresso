@@ -6,7 +6,7 @@
 use crate::types::CompileRequest;
 
 #[derive(Debug, Default)]
-pub struct Queue {
+pub(crate) struct Queue {
     pending: Option<CompileRequest>,
 }
 

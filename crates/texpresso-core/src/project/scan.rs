@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 /// 相对项目根的组件中是否有 `tmp/` 或隐藏项（.git 等）。
 /// 项目根**之前**的隐藏父目录不算（如 `~/.projects/foo` 是合法项目根）。
-pub fn is_hidden_or_tmp(path: &Path, root: &Path) -> bool {
+fn is_hidden_or_tmp(path: &Path, root: &Path) -> bool {
     let rel = path.strip_prefix(root).unwrap_or(path);
     for comp in rel.components() {
         let name = comp.as_os_str().to_str().unwrap_or("");

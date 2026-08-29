@@ -16,8 +16,6 @@ export const ipc = {
   openProject: (folder: string) => unwrap(commands.openProject(folder)),
   listDir: (path: string) => unwrap(commands.listDir(path)),
   readFile: (path: string) => unwrap(commands.readFile(path)),
-  writeFile: (path: string, content: string) => unwrap(commands.writeFile(path, content)),
-  saveFile: (path: string, content: string) => unwrap(commands.saveFile(path, content)),
   saveAll: (files: { path: string; content: string }[]) => unwrap(commands.saveAll(files)),
   compileNow: () => unwrap(commands.compileNow()),
   abortCompile: () => unwrap(commands.abortCompile()),
@@ -29,5 +27,3 @@ export const ipc = {
   updateSettings: (patch: Parameters<typeof commands.updateSettings>[0]) =>
     unwrap(commands.updateSettings(patch)),
 };
-
-export type { CmdError } from "../bindings";

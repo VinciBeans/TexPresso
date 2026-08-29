@@ -8,7 +8,7 @@ use crate::types::{CompileOutcome, FailureKind};
 
 /// 决策结果：由 actor 执行（modules.md §2.3）。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Decide {
+pub(crate) enum Decide {
     /// 执行队列中的最新请求（跳过错过的旧版本）。
     StartPending,
     /// 超时且无等待：同一请求重试一次。
@@ -32,7 +32,7 @@ pub enum Decide {
 /// | Aborted        | true        | —       | StartPending（abort 后的新请求是新意图） |
 /// | Aborted        | false       | —       | Fail(Aborted) |
 /// | IoError        | —           | —       | 视同 ContentError |
-pub fn decide(attempt: u8, outcome: &CompileOutcome, has_pending: bool) -> Decide {
+pub(crate) fn decide(attempt: u8, outcome: &CompileOutcome, has_pending: bool) -> Decide {
     match outcome {
         CompileOutcome::Success { .. } => {
             if has_pending {

@@ -254,9 +254,8 @@ async function resetDefaults() {
   border-bottom: 1.5px solid var(--line-soft);
   flex: 0 0 auto;
 }
-.head-icon { color: var(--blueberry); display: inline-flex; }
-.panel-head svg { color: var(--blueberry); flex: 0 0 auto; }
 .head-title { font-weight: 700; font-size: 13.5px; letter-spacing: 0.5px; }
+.panel-head svg { color: var(--blueberry); flex: 0 0 auto; }
 .head-close {
   margin-left: auto;
   width: 24px;

@@ -41,6 +41,7 @@ Cargo workspace 两 crate（见 ADR-0006）：
 | `log_parser` | .log 解析 → ErrorEntry（快照测试） |
 | `synctex` | `SyncTexProvider` 接口 + 输出解析（进程调用在 src-tauri） |
 | `settings` | 设置模型、默认值、全局/项目合并、校验 |
+| `compose` | 组合层翻译：文件事件/手动编译 → `CompileRequest`（D3，src-tauri watch 调用） |
 | `types` | 跨边界 DTO（CompileStatus / ErrorEntry / ProjectInfo / Settings…，specta 导出） |
 
 **src-tauri**（接线薄壳）
@@ -71,9 +72,7 @@ Cargo workspace 两 crate（见 ADR-0006）：
 | open_project | folder | ProjectInfo（含根文件探测结果） |
 | list_dir | path | Vec\<DirEntryInfo\>（递归文件树，含目录；前端防抖） |
 | read_file | path | content |
-| write_file | path, content | 空（与 save_file 完全同一实现 `save_content`，别名） |
-| save_file | path, content | 空（同上） |
-| save_all | files: Vec\<FileContent\> | 空（自动保存批量写盘用） |
+| save_all | files: Vec\<FileContent\> | 空（写盘：`save_content`；自动保存批量写盘用，唯一保存路径） |
 | compile_now | 空 | 空 |
 | abort_compile | 空 | 空 |
 | synctex_forward | file, line, col | { page, x, y } |

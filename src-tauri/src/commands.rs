@@ -209,18 +209,6 @@ pub async fn read_file(path: String, state: State<'_, AppState>) -> Result<Strin
 
 #[tauri::command]
 #[specta::specta]
-pub async fn write_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), CmdError> {
-    save_content(&state, Path::new(&path), &content).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn save_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), CmdError> {
-    save_content(&state, Path::new(&path), &content).await
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn save_all(files: Vec<FileContent>, state: State<'_, AppState>) -> Result<(), CmdError> {
     for f in &files {
         save_content(&state, Path::new(&f.path), &f.content).await?;

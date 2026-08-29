@@ -12,7 +12,5 @@ pub mod scan;
 
 pub use fs::{DirEntry, FileSystem};
 pub use model::{ProjectState, RootCandidate, RootResolution};
-pub use scan::{collect_tex_files, is_hidden_or_tmp, is_ignored, is_tree_excluded};
-pub use root_detect::{
-    extract_documentclass, extract_includes, find_candidates, resolve,
-};
+pub use scan::{collect_tex_files, is_ignored, is_tree_excluded};
+pub use root_detect::{find_candidates, resolve};

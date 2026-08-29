@@ -13,7 +13,6 @@ use std::time::Duration;
 
 /// TeX 引擎（默认 xelatex，见 design.md）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
 pub enum Engine {
     #[serde(rename = "xelatex")]
     XeLaTeX,

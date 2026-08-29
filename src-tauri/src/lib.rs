@@ -122,8 +122,6 @@ fn build_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::open_project,
             commands::list_dir,
             commands::read_file,
-            commands::write_file,
-            commands::save_file,
             commands::save_all,
             commands::compile_now,
             commands::abort_compile,

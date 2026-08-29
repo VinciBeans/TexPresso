@@ -413,7 +413,7 @@ pub fn is_self_write(&self, path: &Path, content: &str) -> bool;  // 自写盘 h
 
 ```
 watch.rs          —— notify 8.2 接线：事件规范化 + 过滤
-compose.rs        —— 组合层：文件事件 → 编译请求（D3 的关键翻译）
+compose.rs        —— 组合层：文件事件 → 编译请求（D3 的关键翻译，位于 core，由本层调用）
 ```
 
 ```rust
@@ -450,8 +450,8 @@ pub fn on_tex_changed(&self, path: PathBuf) {
 |---|---|
 | open_project(folder) | 校验目录 → 加载项目设置 → 探测根文件（有 root_file 覆盖则跳过探测）→ 更新项目状态 → 返回 ProjectInfo；探测为 Multiple → 前端弹窗后 update_settings 补 root_file |
 | list_dir(path) | 递归 `collect_tex_files` 变体（返回全树 DirEntryInfo，含目录；前端防抖重建用） |
-| read_file / write_file | tokio::fs 读写 + 路径校验 |
-| save_all / save_file | 写盘（同 write_file）——不触发任何编译逻辑，watch 自然驱动 |
+| read_file | tokio::fs 读 + 路径校验 |
+| save_all | 写盘（`save_content`）——不触发编译逻辑，watch 自然驱动；唯一保存路径 |
 | compile_now | compose.compile_request_manual：只看 root_file（忽略活动文件路径），构造请求入队 |
 | abort_compile | scheduler.send(Abort) |
 | synctex_forward / inverse | 调 provider，错误 → { code, message } |
@@ -463,7 +463,7 @@ pub fn on_tex_changed(&self, path: PathBuf) {
 
 ```ts
 // ipc.ts —— specta 生成 + 薄封装（类型全自动，本文件不手写任何 DTO）
-export const ipc = { openProject, listDir, readFile, writeFile, saveAll, saveFile,
+export const ipc = { openProject, listDir, readFile, saveAll,
                      compileNow, abortCompile, synctexForward, synctexInverse,
                      getSettings, updateSettings }  // 均为 Promise<T>
 
@@ -490,8 +490,8 @@ useAutoSave 依赖 editorStore.dirty + settingsStore（读）
 
 | store | 状态（模块内） | 动作 |
 |---|---|---|
-| projectStore | project、rootFile、fileTree、treeVersion | openProject、refreshTree |
-| editorStore | openTabs[]、activePath、dirtyPaths:Set、lastSaved:Map<path,time> | openFile、closeTab、markDirty、saveFile、saveAll、onFilesChanged |
+| projectStore | project、rootFile、fileTree | openProject、refreshTree、refreshTreeDebounced、resolvePath |
+| editorStore | openTabs[]、activePath、dirtyPaths:Set、lastSaved:Map<path,time>、buffers、externalConflict | openFile、closeTab、markDirty、markSaved、saveAll、onFilesChanged、acceptExternal |
 | compileStore | phase、kind、errors[] | setStatus、setErrors |
 | previewStore | pdfPath、reloadKey、highlight | onPdfUpdated、setHighlight |
 | settingsStore | settings | setSettings、updateSettings |

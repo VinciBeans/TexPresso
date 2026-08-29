@@ -6,7 +6,7 @@ import { normalizePath, useProjectStore } from "../project";
 import { ipc } from "../../services/ipc";
 
 vi.mock("../../services/ipc", () => ({
-  ipc: { listDir: vi.fn(async () => []) },
+  ipc: { listDir: vi.fn(async () => [{ name: "main.tex", path: "E:/proj/main.tex", is_dir: false }]) },
 }));
 
 describe("normalizePath", () => {
@@ -82,7 +82,7 @@ describe("refreshTreeDebounced（文件树增量刷新）", () => {
     store.refreshTreeDebounced(false); // 如自动保存
     await vi.advanceTimersByTimeAsync(500);
     expect(vi.mocked(ipc.listDir)).not.toHaveBeenCalled();
-    expect(store.treeVersion).toBe(0);
+    expect(store.tree).toEqual([]); // 树未被重建
   });
 
   it("结构变化（structural=true）→ 防抖后重建文件树", async () => {
@@ -90,7 +90,7 @@ describe("refreshTreeDebounced（文件树增量刷新）", () => {
     store.refreshTreeDebounced(true); // 如新建/删除文件
     await vi.advanceTimersByTimeAsync(500);
     expect(vi.mocked(ipc.listDir)).toHaveBeenCalledTimes(1);
-    expect(store.treeVersion).toBe(1);
+    expect(store.tree.length).toBe(1); // 树已重建（拿到目录项）
   });
 
   it("先结构变化后内容修改 → 仍重建一次（保留了结构变化意图）", async () => {
@@ -99,6 +99,6 @@ describe("refreshTreeDebounced（文件树增量刷新）", () => {
     store.refreshTreeDebounced(false); // 防抖窗口内：不覆盖结构变化意图
     await vi.advanceTimersByTimeAsync(500);
     expect(vi.mocked(ipc.listDir)).toHaveBeenCalledTimes(1);
-    expect(store.treeVersion).toBe(1);
+    expect(store.tree.length).toBe(1);
   });
 });

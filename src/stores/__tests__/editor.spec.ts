@@ -8,7 +8,6 @@ import { useProjectStore } from "../project";
 vi.mock("../../services/ipc", () => ({
   ipc: {
     readFile: vi.fn(async (p: string) => `content-of:${p}`),
-    saveFile: vi.fn(async () => undefined),
     saveAll: vi.fn(async () => []),
   },
 }));

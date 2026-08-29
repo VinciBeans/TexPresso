@@ -11,6 +11,4 @@ pub mod queue;
 pub mod runner;
 
 pub use actor::{Emitter, Scheduler, SchedulerHandle};
-pub use policy::{decide, Decide};
-pub use queue::Queue;
 pub use runner::CompileRunner;

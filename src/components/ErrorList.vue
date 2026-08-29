@@ -16,16 +16,18 @@ const MAX_DISPLAY = 30;
 interface Group {
   entry: ErrorEntry;
   count: number;
+  firstLine: string;
 }
 
 /** 去重：file + 首行消息 作为键；保留首次出现的文件/行号。 */
 const grouped = computed(() => {
   const seen = new Map<string, Group>();
   for (const e of compile.errors) {
-    const key = `${e.file ?? ""}\n${e.message.split("\n")[0] ?? ""}`;
+    const firstLine = e.message.split("\n")[0] ?? "";
+    const key = `${e.file ?? ""}\n${firstLine}`;
     const g = seen.get(key);
     if (g) g.count += 1;
-    else seen.set(key, { entry: e, count: 1 });
+    else seen.set(key, { entry: e, count: 1, firstLine });
   }
   const items = [...seen.values()];
   return {
@@ -61,7 +63,7 @@ function jump(file: string | null, line: number | null) {
         <span class="badge">!</span>
         <span class="count" v-if="g.count > 1" :title="`同类错误共 ${g.count} 条，已折叠`">×{{ g.count }}</span>
         <span class="loc" v-if="g.entry.file">{{ g.entry.file }}<template v-if="g.entry.line">:{{ g.entry.line }}</template></span>
-        <span class="msg">{{ g.entry.message.split("\n")[0] }}</span>
+        <span class="msg">{{ g.firstLine }}</span>
       </div>
       <div class="more" v-if="grouped.hidden > 0">
         另有 {{ grouped.hidden }} 组错误未显示（仅展示前 {{ MAX_DISPLAY }} 组去重结果）

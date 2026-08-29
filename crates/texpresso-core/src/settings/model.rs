@@ -50,8 +50,6 @@ impl Default for Settings {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectOverrides {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schema_version: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compile: Option<CompileOverrides>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_file: Option<PathBuf>,
@@ -136,7 +134,6 @@ mod tests {
         assert_eq!(o.compile.as_ref().unwrap().mode, Some(CompileMode::OnSave));
         assert_eq!(o.compile.as_ref().unwrap().debounce_ms, None);
         assert_eq!(o.root_file, None);
-        assert_eq!(o.schema_version, None);
     }
 
     #[test]

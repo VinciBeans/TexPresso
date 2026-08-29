@@ -1,6 +1,6 @@
 //! 设置合并与局部更新（modules.md §6）。
 
-use super::model::{CompileOverrides, ProjectOverrides, Settings, SettingsPatch};
+use super::model::{ProjectOverrides, Settings, SettingsPatch};
 
 /// 项目覆盖全局：字段级 Option 语义，缺失继承全局（modules.md §6 merge 算法）。
 ///
@@ -52,25 +52,10 @@ pub fn apply_patch(settings: &mut Settings, patch: &SettingsPatch) -> Result<(),
     Ok(())
 }
 
-/// 把覆盖写进全局设置（用于"清除覆盖、回归全局值"的序列化场景）。
-///
-/// v1 未用到（保留给未来"重置项目覆盖"功能），不设测试。
-#[allow(dead_code)]
-pub(crate) fn overrides_to_patch(overrides: &ProjectOverrides) -> SettingsPatch {
-    let compile: Option<&CompileOverrides> = overrides.compile.as_ref();
-    SettingsPatch {
-        mode: compile.and_then(|c| c.mode),
-        debounce_ms: compile.and_then(|c| c.debounce_ms),
-        timeout_secs: compile.and_then(|c| c.timeout_secs),
-        engine: compile.and_then(|c| c.engine),
-        root_file: overrides.root_file.clone().map(Some),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::model::{CompileSettings, SCHEMA_VERSION};
+    use crate::settings::model::{CompileOverrides, CompileSettings, SCHEMA_VERSION};
     use crate::types::{CompileMode, Engine};
     use std::path::PathBuf;
 
@@ -98,7 +83,6 @@ mod tests {
     fn merge_partial_override_inherits_rest() {
         let g = global();
         let o = ProjectOverrides {
-            schema_version: None,
             compile: Some(CompileOverrides {
                 mode: Some(CompileMode::OnSave),
                 ..CompileOverrides::default()
@@ -120,7 +104,6 @@ mod tests {
     #[test]
     fn merge_overrides_all_compile_fields() {
         let o = ProjectOverrides {
-            schema_version: None,
             compile: Some(CompileOverrides {
                 mode: Some(CompileMode::OnSave),
                 debounce_ms: Some(800),

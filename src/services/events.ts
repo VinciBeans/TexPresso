@@ -14,29 +14,26 @@ export function subscribeEvents(): () => void {
 
   unlisteners.push(
     events.compileStatus.listen((e) => {
-      const dto = e.payload as any;
+      const dto = e.payload;
       useCompileStore().setStatus(dto.phase, dto.kind);
       // 编译成功 = 文档结构已确立 → 重建大纲（source 结构变化后保持同步）
       if (dto.phase === "success") useOutlineStore().refresh().catch(() => {});
     }),
     events.errorsUpdated.listen((e) => {
-      useCompileStore().setErrors(e.payload as any);
+      useCompileStore().setErrors(e.payload);
     }),
     events.pdfUpdated.listen((e) => {
-      const p = e.payload as any;
-      usePreviewStore().onPdfUpdated(p.path as string);
+      usePreviewStore().onPdfUpdated(e.payload.path);
     }),
     events.filesChanged.listen((e) => {
-      const p = e.payload as any;
-      const paths: string[] = p.paths ?? [];
-      const structural: boolean = p.structural ?? true; // 缺省按结构变化处理（保守）
-      useEditorStore().onFilesChanged(paths);
-      useProjectStore().refreshTreeDebounced(structural);
+      const p = e.payload;
+      useEditorStore().onFilesChanged(p.paths);
+      useProjectStore().refreshTreeDebounced(p.structural);
       // 结构变化（增/删/重命名）→ 文件集合变了，重建大纲
-      if (structural) useOutlineStore().refresh().catch(() => {});
+      if (p.structural) useOutlineStore().refresh().catch(() => {});
     }),
     events.settingsChanged.listen((e) => {
-      useSettingsStore().setSettings(e.payload as any);
+      useSettingsStore().setSettings(e.payload);
     }),
   );
 

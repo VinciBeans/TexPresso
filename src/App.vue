@@ -19,6 +19,7 @@ import { useAutoSave } from "./composables/useAutoSave";
 import { ipc } from "./services/ipc";
 import { subscribeEvents } from "./services/events";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import type { ProjectInfo } from "./bindings";
 
 const project = useProjectStore();
 const editor = useEditorStore();
@@ -64,9 +65,7 @@ onMounted(async () => {
   const envProject = import.meta.env.VITE_TEXPRESSO_PROJECT as string | undefined;
   if (envProject) {
     try {
-      const info = await project.openProject(envProject);
-      if (info.root_file) await editor.openFile(info.root_file);
-      await outline.refresh();
+      await openProjectInto(envProject);
     } catch (e) {
       console.error("自动打开项目失败：", e);
     }
@@ -78,19 +77,24 @@ onBeforeUnmount(() => {
   removeKeydown?.();
 });
 
+/** 打开项目公共流程：openProject → 打开根文件 → 重建大纲。返回 info 供调用方按需提示。 */
+async function openProjectInto(dir: string): Promise<ProjectInfo> {
+  const info = await project.openProject(dir);
+  if (info.root_file) await editor.openFile(info.root_file);
+  await outline.refresh();
+  return info;
+}
+
 /** 打开项目（dialog 选文件夹）。 */
 async function chooseProject() {
   const dir = await open({ directory: true, title: "打开 TeX 项目文件夹" });
   if (!dir) return;
   try {
-    const info = await project.openProject(dir);
-    if (info.root_file) {
-      await editor.openFile(info.root_file);
-    } else {
+    const info = await openProjectInto(dir);
+    if (!info.root_file) {
       // 多候选/零候选：v1 提示手动选择根文件
       console.warn("未探测到唯一根文件，请在设置中手动指定 root_file");
     }
-    await outline.refresh();
   } catch (e) {
     console.error("打开项目失败：", e);
   }
@@ -373,10 +377,6 @@ body {
 .editor-area { display: flex; flex-direction: column; height: 100%; background: var(--card); }
 .editor-area > :last-child { flex: 1; min-height: 0; }
 .error-area { height: 100%; }
-.placeholder {
-  height: 100%; display: flex; align-items: center; justify-content: center;
-  color: var(--ink-faint); font-size: 12.5px; letter-spacing: 1px;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .btn.primary.typesetting { animation: none; }

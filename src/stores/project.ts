@@ -7,7 +7,6 @@ import type { DirEntryInfo, ProjectInfo } from "../bindings";
 export const useProjectStore = defineStore("project", () => {
   const project = ref<ProjectInfo | null>(null);
   const tree = ref<DirEntryInfo[]>([]);
-  const treeVersion = ref(0);
 
   const root = computed(() => project.value?.root ?? "");
 
@@ -21,7 +20,6 @@ export const useProjectStore = defineStore("project", () => {
   async function refreshTree() {
     if (!project.value) return;
     tree.value = await ipc.listDir(project.value.root);
-    treeVersion.value++;
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -52,7 +50,7 @@ export const useProjectStore = defineStore("project", () => {
     return normalizePath(base);
   }
 
-  return { project, tree, treeVersion, root, openProject, refreshTree, refreshTreeDebounced, resolvePath };
+  return { project, tree, root, openProject, refreshTree, refreshTreeDebounced, resolvePath };
 });
 
 /** 归一化文件路径：折叠连续斜杠、剥 `.`、合并 `..`（浏览器环境手写，不依赖 node:path）。

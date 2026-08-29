@@ -13,7 +13,6 @@ import { ipc } from "../services/ipc";
 
 export interface OutlineNode {
   title: string;
-  shortTitle?: string;
   /** 结构层级：0=part,1=chapter,2=section,3=subsection,4=subsubsection,5=paragraph,6=subparagraph。 */
   level: number;
   file: string;
@@ -25,7 +24,6 @@ export interface OutlineNode {
 interface FlatItem {
   level: number;
   title: string;
-  short?: string;
   file: string;
   line: number;
 }
@@ -49,7 +47,6 @@ const INCLUDE_RE = /\\(include|input)(\*)?\s*\{([^}]*)\}/;
 
 export const useOutlineStore = defineStore("outline", () => {
   const items = ref<OutlineNode[]>([]);
-  const root = ref<string | null>(null);
   /** 刷新序号：并发 refresh 时只有最新一次写结果，旧刷新完成即放弃（防陈旧覆盖）。 */
   let refreshSeq = 0;
 
@@ -126,7 +123,6 @@ export const useOutlineStore = defineStore("outline", () => {
         ctx.flat.push({
           level: LEVEL[sec[1]] ?? 2,
           title: sec[4].trim(),
-          short: sec[3] ? sec[3].trim() : undefined,
           file: key,
           line: i + 1,
         });
@@ -142,7 +138,6 @@ export const useOutlineStore = defineStore("outline", () => {
       if (!f.title) continue;
       const node: OutlineNode = {
         title: f.title,
-        shortTitle: f.short,
         level: f.level,
         file: f.file,
         line: f.line,
@@ -164,7 +159,6 @@ export const useOutlineStore = defineStore("outline", () => {
     const project = useProjectStore();
     if (!project.project) {
       items.value = [];
-      root.value = null;
       return;
     }
     const flat: FlatItem[] = [];
@@ -183,7 +177,6 @@ export const useOutlineStore = defineStore("outline", () => {
     // 也避免了两次 refresh 交错写 items 造成的覆盖顺序不确定性。
     if (mySeq !== refreshSeq) return;
     items.value = buildTree(flat);
-    root.value = rootFile;
   }
 
   /** 点击大纲项：揭示源码 + SyncTeX 正向高亮/居中 PDF 对应页（尽力而为）。 */
@@ -196,5 +189,5 @@ export const useOutlineStore = defineStore("outline", () => {
     }
   }
 
-  return { items, root, isEmpty, refresh, goTo };
+  return { items, isEmpty, refresh, goTo };
 });
