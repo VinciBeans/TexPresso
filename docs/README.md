@@ -7,7 +7,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| [根 README](../README.md) | 项目门面：特性、快速开始、仓库结构、Roadmap |
+| [根 README](../README.md) | 项目门面：安装、快速开始、特性、许可（仓库结构见 [AGENTS.md](../AGENTS.md)，设计与 Roadmap 见 [design.md](./design.md)） |
 | [CONTEXT.md](../CONTEXT.md) | 术语表（ubiquitous language） |
 | [design.md](./design.md) | 完整设计：产品定位、技术栈、编译子系统、MVP 边界、分发与质量底线（含后置/未决清单） |
 | [architecture.md](./architecture.md) | 分层设计：Rust/前端模块、层间接口契约、数据流、技术栈冻结、安全与工程基建 |
